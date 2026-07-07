@@ -4,6 +4,7 @@ import { esc } from './util.js';
 import { renderLogin } from './views/login.js';
 import { renderNotebooks } from './views/notebooks.js';
 import { renderNotebook } from './views/notebook.js';
+import { renderWord } from './views/word.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -34,6 +35,7 @@ async function start(): Promise<void> {
     initRouter(view, [
       { pattern: /^#\/$/, render: renderNotebooks },
       { pattern: /^#\/notebooks\/([\w-]+)$/, render: renderNotebook },
+      { pattern: /^#\/words\/([\w-]+)$/, render: renderWord },
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {

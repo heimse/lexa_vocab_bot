@@ -8,5 +8,7 @@ export const config = {
   port: Number(process.env.PORT ?? 3000),
   jwtSecret: required('JWT_SECRET'),
   telegramBotToken: required('TELEGRAM_BOT_TOKEN'),
+  openaiApiKey: required('OPENAI_API_KEY'),
+  openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
   isDev: process.env.NODE_ENV !== 'production',
 };

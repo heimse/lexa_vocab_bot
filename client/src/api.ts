@@ -53,6 +53,32 @@ export interface NotebookWord {
   addedAt: string;
 }
 
+export interface WordCard {
+  id: string;
+  text: string;
+  language: string | null;
+  translation: string | null;
+  partOfSpeech: string | null;
+  explanation: string | null;
+  examples: string[];
+  synonyms: string[];
+  antonyms: string[];
+  level: string | null;
+  aiStatus: 'PENDING' | 'READY' | 'FAILED';
+  aiError: string | null;
+  status: string;
+  due: string;
+  lastReview: string | null;
+  reps: number;
+  createdAt: string;
+}
+
+export interface ImportResult {
+  created: number;
+  linked: number;
+  total: number;
+}
+
 export interface NotebookDetail {
   id: string;
   title: string;

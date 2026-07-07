@@ -1,4 +1,10 @@
-import { api, ApiError, type NotebookDetail, type NotebookWord } from '../api.js';
+import {
+  api,
+  ApiError,
+  type ImportResult,
+  type NotebookDetail,
+  type NotebookWord,
+} from '../api.js';
 import { esc } from '../util.js';
 
 const AI_STATUS_LABEL: Record<NotebookWord['aiStatus'], string> = {
@@ -6,6 +12,8 @@ const AI_STATUS_LABEL: Record<NotebookWord['aiStatus'], string> = {
   READY: '',
   FAILED: '⚠️ ошибка AI',
 };
+
+const POLL_INTERVAL = 2500;
 
 export async function renderNotebook(container: HTMLElement, params: string[]): Promise<void> {
   const id = params[0]!;
@@ -20,6 +28,11 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
     throw err;
   }
 
+  // Сохраняем черновик ввода между перерисовками (поллинг)
+  const draft = container.querySelector<HTMLTextAreaElement>('#import-text')?.value ?? '';
+
+  const pendingCount = notebook.items.filter((w) => w.aiStatus === 'PENDING').length;
+
   container.innerHTML = `
     <section class="page">
       <p><a href="#/">← Все наборы</a></p>
@@ -28,7 +41,16 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
         <span class="muted">${notebook.items.length} слов</span>
       </div>
       ${notebook.description ? `<p class="muted">${esc(notebook.description)}</p>` : ''}
-      <p class="muted">Массовое добавление слов появится на следующем этапе.</p>
+      <form id="import-form" class="import-form">
+        <textarea id="import-text" rows="5"
+          placeholder="Вставьте слова или фразы — по одному на строку:&#10;&#10;destiny&#10;look forward to&#10;by the way"></textarea>
+        <div class="import-actions">
+          <button type="submit" class="btn btn-primary">Обработать</button>
+          <span class="muted" id="import-status">${
+            pendingCount > 0 ? `⏳ AI обрабатывает ${pendingCount} слов…` : ''
+          }</span>
+        </div>
+      </form>
       ${
         notebook.items.length === 0
           ? '<p class="muted">В наборе пока нет слов.</p>'
@@ -42,7 +64,7 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
             .map(
               (w) => `
             <tr>
-              <td class="word-text">${esc(w.text)}</td>
+              <td class="word-text"><a href="#/words/${w.id}">${esc(w.text)}</a></td>
               <td>${esc(w.translation) || '—'}</td>
               <td>${esc(w.partOfSpeech) || '—'}</td>
               <td>${esc(w.level) || '—'}</td>
@@ -55,4 +77,36 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
       }
     </section>
   `;
+
+  const textarea = container.querySelector<HTMLTextAreaElement>('#import-text')!;
+  textarea.value = draft;
+
+  container
+    .querySelector<HTMLFormElement>('#import-form')!
+    .addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = textarea.value.trim();
+      if (!text) return;
+      const status = container.querySelector<HTMLSpanElement>('#import-status')!;
+      status.textContent = 'Отправка…';
+      try {
+        const result = await api<ImportResult>('/api/vocabulary/import', {
+          method: 'POST',
+          body: JSON.stringify({ notebookId: id, text }),
+        });
+        textarea.value = '';
+        status.textContent = `Добавлено новых: ${result.created}, уже были в словаре: ${result.linked}`;
+        await renderNotebook(container, params);
+      } catch (err) {
+        status.textContent = err instanceof Error ? err.message : 'Ошибка импорта';
+      }
+    });
+
+  if (pendingCount > 0) {
+    setTimeout(() => {
+      if (location.hash === `#/notebooks/${id}` && container.isConnected) {
+        void renderNotebook(container, params);
+      }
+    }, POLL_INTERVAL);
+  }
 }
