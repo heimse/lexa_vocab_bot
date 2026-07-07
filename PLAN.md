@@ -20,7 +20,7 @@
 
 ---
 
-## Этап 0. Каркас проекта ⬜
+## Этап 0. Каркас проекта ✅
 
 1. `git init`, `.gitignore`, `README.md`.
 2. npm workspaces: корневой `package.json`, пакеты `client/` и `server/` (+ опционально `shared/` для типов DTO).
