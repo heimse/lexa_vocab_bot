@@ -1,0 +1,23 @@
+{
+  "name": "lexa",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LEXA — AI Vocabulary. Не просто словарь. Личная память для иностранных слов.",
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev --workspace server\" \"npm:dev --workspace client\"",
+    "build": "npm run build --workspace server && npm run build --workspace client",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3"
+  },
+  "volta": {
+    "node": "22.22.2"
+  }
+}
