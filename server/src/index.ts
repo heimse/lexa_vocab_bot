@@ -1,10 +1,16 @@
 import express from 'express';
+import cookieParser from 'cookie-parser';
 import { prisma } from './db.js';
+import { config } from './config.js';
+import { authRouter } from './auth/router.js';
 
 const app = express();
-const PORT = Number(process.env.PORT ?? 3000);
+const PORT = config.port;
 
 app.use(express.json());
+app.use(cookieParser());
+
+app.use('/api/auth', authRouter);
 
 app.get('/api/health', async (_req, res) => {
   try {

@@ -39,7 +39,29 @@ body {
   color: #9aa0aa;
 }
 
-.api-status {
-  margin-top: 2rem;
+.muted {
   font-size: 0.875rem;
+}
+
+.login-actions {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.btn {
+  font: inherit;
+  padding: 0.6rem 1.4rem;
+  border: 1px solid #2f3542;
+  border-radius: 8px;
+  background: #1a1f2b;
+  color: #e6e6e6;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn:hover {
+  background: #232a3a;
 }

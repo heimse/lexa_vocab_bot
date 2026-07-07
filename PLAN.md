@@ -47,7 +47,7 @@
 
 ---
 
-## Этап 2. Авторизация ⬜
+## Этап 2. Авторизация ✅
 
 1. `POST /auth/telegram` — валидация данных Login Widget (HMAC-SHA256 по bot token), upsert пользователя, выдача JWT в httpOnly cookie.
 2. Middleware `requireAuth` — проверка JWT, `req.user`.
