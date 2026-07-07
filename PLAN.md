@@ -58,7 +58,7 @@
 
 ---
 
-## Этап 3. Наборы (Notebooks) ⬜
+## Этап 3. Наборы (Notebooks) ✅
 
 1. CRUD API: `GET/POST /notebooks`, `PATCH/DELETE /notebooks/:id` (с проверкой владельца). `GET /notebooks/:id` — набор + слова + статистика.
 2. Frontend: список наборов, создание/переименование/удаление, страница набора.

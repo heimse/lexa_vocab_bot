@@ -31,3 +31,33 @@ export interface AuthConfig {
   botUsername: string | null;
   devMode: boolean;
 }
+
+export interface Notebook {
+  id: string;
+  title: string;
+  description: string | null;
+  emoji: string | null;
+  createdAt: string;
+  wordCount: number;
+}
+
+export interface NotebookWord {
+  id: string;
+  text: string;
+  language: string | null;
+  translation: string | null;
+  partOfSpeech: string | null;
+  level: string | null;
+  aiStatus: 'PENDING' | 'READY' | 'FAILED';
+  status: 'NEW' | 'LEARNING' | 'REVIEW' | 'MASTERED';
+  addedAt: string;
+}
+
+export interface NotebookDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  emoji: string | null;
+  createdAt: string;
+  items: NotebookWord[];
+}

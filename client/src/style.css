@@ -17,6 +17,22 @@ body {
   min-height: 100vh;
 }
 
+a {
+  color: #7aa2f7;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.muted {
+  color: #9aa0aa;
+  font-size: 0.875rem;
+}
+
+/* --- Landing / login --- */
+
 .landing {
   display: flex;
   flex-direction: column;
@@ -39,10 +55,6 @@ body {
   color: #9aa0aa;
 }
 
-.muted {
-  font-size: 0.875rem;
-}
-
 .login-actions {
   margin-top: 2rem;
   display: flex;
@@ -50,6 +62,8 @@ body {
   align-items: center;
   gap: 1rem;
 }
+
+/* --- Buttons --- */
 
 .btn {
   font: inherit;
@@ -64,4 +78,183 @@ body {
 
 .btn:hover {
   background: #232a3a;
+}
+
+.btn-primary {
+  background: #3450a3;
+  border-color: #3450a3;
+}
+
+.btn-primary:hover {
+  background: #3f5fc0;
+}
+
+.btn-small {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.875rem;
+}
+
+.icon-btn {
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+.icon-btn:hover {
+  background: #232a3a;
+}
+
+/* --- Layout --- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  border-bottom: 1px solid #1f2430;
+}
+
+.logo {
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: #e6e6e6;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.view {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.page-header h2 {
+  margin: 0.5rem 0;
+}
+
+/* --- Notebook cards --- */
+
+.create-form {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.create-form input {
+  font: inherit;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid #2f3542;
+  border-radius: 8px;
+  background: #151923;
+  color: #e6e6e6;
+}
+
+.create-form input:focus {
+  outline: none;
+  border-color: #3450a3;
+}
+
+#create-emoji {
+  width: 4rem;
+  text-align: center;
+}
+
+#create-title {
+  flex: 1;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #1f2430;
+  border-radius: 12px;
+  background: #151923;
+  padding: 1rem;
+  transition: border-color 0.15s;
+}
+
+.card:hover {
+  border-color: #3450a3;
+}
+
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: inherit;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-body:hover {
+  text-decoration: none;
+}
+
+.card-emoji {
+  font-size: 1.5rem;
+}
+
+.card-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-meta {
+  color: #9aa0aa;
+  font-size: 0.8rem;
+}
+
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* --- Word table --- */
+
+.word-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+.word-table th,
+.word-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #1f2430;
+}
+
+.word-table th {
+  color: #9aa0aa;
+  font-weight: 500;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.word-text {
+  font-weight: 600;
 }

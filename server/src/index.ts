@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import { prisma } from './db.js';
 import { config } from './config.js';
 import { authRouter } from './auth/router.js';
+import { notebooksRouter } from './notebooks/router.js';
 
 const app = express();
 const PORT = config.port;
@@ -11,6 +12,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use('/api/auth', authRouter);
+app.use('/api/notebooks', notebooksRouter);
 
 app.get('/api/health', async (_req, res) => {
   try {

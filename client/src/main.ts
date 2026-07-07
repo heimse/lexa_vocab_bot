@@ -1,81 +1,45 @@
-import { api, ApiError, type AuthConfig, type CurrentUser } from './api.js';
+import { api, ApiError, type CurrentUser } from './api.js';
+import { initRouter } from './router.js';
+import { esc } from './util.js';
+import { renderLogin } from './views/login.js';
+import { renderNotebooks } from './views/notebooks.js';
+import { renderNotebook } from './views/notebook.js';
 
-const app = document.querySelector<HTMLDivElement>('#app')!;
+const root = document.querySelector<HTMLDivElement>('#app')!;
 
-declare global {
-  interface Window {
-    onTelegramAuth?: (user: Record<string, unknown>) => void;
-  }
-}
-
-async function renderLogin(): Promise<void> {
-  const config = await api<AuthConfig>('/api/auth/config');
-
-  app.innerHTML = `
-    <main class="landing">
-      <h1>LEXA</h1>
-      <p>Не просто словарь. Личная память для иностранных слов.</p>
-      <div class="login-actions" id="login-actions"></div>
-    </main>
-  `;
-  const actions = document.querySelector<HTMLDivElement>('#login-actions')!;
-
-  if (config.botUsername) {
-    window.onTelegramAuth = async (user) => {
-      try {
-        await api('/api/auth/telegram', { method: 'POST', body: JSON.stringify(user) });
-        await start();
-      } catch (err) {
-        alert(err instanceof Error ? err.message : 'Ошибка входа');
-      }
-    };
-    const script = document.createElement('script');
-    script.src = 'https://telegram.org/widgets/login.js';
-    script.async = true;
-    script.dataset.telegramLogin = config.botUsername;
-    script.dataset.size = 'large';
-    script.dataset.onauth = 'onTelegramAuth(user)';
-    script.dataset.requestAccess = 'write';
-    actions.appendChild(script);
-  }
-
-  if (config.devMode) {
-    const devButton = document.createElement('button');
-    devButton.className = 'btn';
-    devButton.textContent = 'Dev-вход (без Telegram)';
-    devButton.addEventListener('click', async () => {
-      await api('/api/auth/dev', { method: 'POST' });
-      await start();
-    });
-    actions.appendChild(devButton);
-  }
-}
-
-function renderHome(user: CurrentUser): void {
+function renderLayout(user: CurrentUser): HTMLElement {
   const name = user.firstName ?? user.username ?? 'пользователь';
-  app.innerHTML = `
-    <main class="landing">
-      <h1>LEXA</h1>
-      <p>Привет, ${name}! Вы вошли через Telegram.</p>
-      <p class="muted">Dashboard появится на следующих этапах.</p>
-      <button class="btn" id="logout">Выйти</button>
-    </main>
+  root.innerHTML = `
+    <header class="topbar">
+      <a class="logo" href="#/">LEXA</a>
+      <div class="topbar-right">
+        <span class="muted">${esc(name)}</span>
+        <button class="btn btn-small" id="logout">Выйти</button>
+      </div>
+    </header>
+    <div id="view" class="view"></div>
   `;
-  document.querySelector<HTMLButtonElement>('#logout')!.addEventListener('click', async () => {
+  root.querySelector<HTMLButtonElement>('#logout')!.addEventListener('click', async () => {
     await api('/api/auth/logout', { method: 'POST' });
+    location.hash = '#/';
     await start();
   });
+  return root.querySelector<HTMLDivElement>('#view')!;
 }
 
 async function start(): Promise<void> {
   try {
     const user = await api<CurrentUser>('/api/auth/me');
-    renderHome(user);
+    const view = renderLayout(user);
+    initRouter(view, [
+      { pattern: /^#\/$/, render: renderNotebooks },
+      { pattern: /^#\/notebooks\/([\w-]+)$/, render: renderNotebook },
+    ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      await renderLogin();
+      await renderLogin(root, start);
     } else {
-      app.innerHTML = `<main class="landing"><h1>LEXA</h1><p>Сервер недоступен</p></main>`;
+      root.innerHTML = `<main class="landing"><h1>LEXA</h1><p>Сервер недоступен</p></main>`;
     }
   }
 }
