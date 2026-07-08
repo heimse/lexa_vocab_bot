@@ -49,9 +49,12 @@ model User {
   createdAt  DateTime @default(now()) @map("created_at")
 
   // Настройки
-  nativeLanguage String @default("ru") @map("native_language") // ISO 639-1, язык переводов
-  dailyDueLimit  Int    @default(20) @map("daily_due_limit")
-  dailyNewLimit  Int    @default(10) @map("daily_new_limit")
+  nativeLanguage String  @default("ru") @map("native_language") // ISO 639-1, язык переводов
+  targetLanguage String  @default("en") @map("target_language") // изучаемый язык (пока один)
+  dailyDueLimit  Int     @default(20) @map("daily_due_limit")
+  dailyNewLimit  Int     @default(10) @map("daily_new_limit")
+  notifyEnabled  Boolean @default(true) @map("notify_enabled")
+  notifyHour     Int     @default(10) @map("notify_hour") // час локального времени сервера, 0–23
 
   notebooks       Notebook[]
   vocabularyItems VocabularyItem[]

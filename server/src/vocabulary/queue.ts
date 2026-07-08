@@ -43,14 +43,18 @@ async function run(): Promise<void> {
 async function processItem(id: string): Promise<void> {
   const item = await prisma.vocabularyItem.findUnique({
     where: { id },
-    include: { user: { select: { nativeLanguage: true } } },
+    include: { user: { select: { nativeLanguage: true, targetLanguage: true } } },
   });
   if (!item || item.aiStatus === 'READY') return;
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const card = await generateCard(item.text, item.user.nativeLanguage);
+      const card = await generateCard(
+        item.text,
+        item.user.nativeLanguage,
+        item.user.targetLanguage,
+      );
       await prisma.vocabularyItem.update({
         where: { id },
         data: {

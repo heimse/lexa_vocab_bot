@@ -21,8 +21,11 @@ export const SUPPORTED_NATIVE_LANGUAGES = [
 
 function toDto(user: {
   nativeLanguage: string;
+  targetLanguage: string;
   dailyDueLimit: number;
   dailyNewLimit: number;
+  notifyEnabled: boolean;
+  notifyHour: number;
   username: string | null;
   firstName: string | null;
 }) {
@@ -30,8 +33,11 @@ function toDto(user: {
     username: user.username,
     firstName: user.firstName,
     nativeLanguage: user.nativeLanguage,
+    targetLanguage: user.targetLanguage,
     dailyDueLimit: user.dailyDueLimit,
     dailyNewLimit: user.dailyNewLimit,
+    notifyEnabled: user.notifyEnabled,
+    notifyHour: user.notifyHour,
   };
 }
 
@@ -46,8 +52,11 @@ settingsRouter.get('/', async (req, res) => {
 
 const updateSchema = z.object({
   nativeLanguage: z.enum(SUPPORTED_NATIVE_LANGUAGES).optional(),
+  targetLanguage: z.enum(SUPPORTED_NATIVE_LANGUAGES).optional(),
   dailyDueLimit: z.number().int().min(1).max(200).optional(),
   dailyNewLimit: z.number().int().min(0).max(100).optional(),
+  notifyEnabled: z.boolean().optional(),
+  notifyHour: z.number().int().min(0).max(23).optional(),
 });
 
 settingsRouter.patch('/', async (req, res) => {

@@ -85,17 +85,25 @@ export const LANGUAGE_NAMES: Record<string, string> = {
 
 const systemPrompt = (
   nativeLanguage: string,
+  targetLanguage: string,
 ) => `You are a professional lexicographer for a vocabulary learning app.
 The learner's native language is ${LANGUAGE_NAMES[nativeLanguage] ?? 'Russian'}: translate into it.
+The learner is studying ${LANGUAGE_NAMES[targetLanguage] ?? 'English'}: entries are usually in that
+language, but always detect the actual language of the entry yourself.
 Given a word, phrase, idiom or phrasal verb, produce a dictionary card for it.
-Detect the language of the entry yourself. Keep explanations short and simple.
+Keep explanations short and simple.
+Synonyms and antonyms must be in the language of the entry and must not repeat the entry itself.
 If the entry contains a typo, correct it silently and describe the corrected form.`;
 
-export async function generateCard(text: string, nativeLanguage = 'ru'): Promise<GeneratedCard> {
+export async function generateCard(
+  text: string,
+  nativeLanguage = 'ru',
+  targetLanguage = 'en',
+): Promise<GeneratedCard> {
   const response = await openai.chat.completions.create({
     model: config.openaiModel,
     messages: [
-      { role: 'system', content: systemPrompt(nativeLanguage) },
+      { role: 'system', content: systemPrompt(nativeLanguage, targetLanguage) },
       { role: 'user', content: text },
     ],
     response_format: {

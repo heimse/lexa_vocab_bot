@@ -256,22 +256,53 @@ export function createBot(): Bot {
   const settingsOverview = async (userId: string) => {
     const u = await prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { nativeLanguage: true, dailyDueLimit: true, dailyNewLimit: true },
+      select: {
+        nativeLanguage: true,
+        targetLanguage: true,
+        dailyDueLimit: true,
+        dailyNewLimit: true,
+        notifyEnabled: true,
+        notifyHour: true,
+      },
     });
+    const hour = `${String(u.notifyHour).padStart(2, '0')}:00`;
     return {
       text: [
         '⚙️ Настройки',
         '',
+        `🎯 Изучаю: ${BOT_LANGUAGE_NAMES[u.targetLanguage] ?? u.targetLanguage}`,
         `🌐 Родной язык: ${BOT_LANGUAGE_NAMES[u.nativeLanguage] ?? u.nativeLanguage}`,
         `📆 Повторений в день: ${u.dailyDueLimit}`,
         `🆕 Новых слов в день: ${u.dailyNewLimit}`,
+        `🔔 Напоминание: ${u.notifyEnabled ? `ежедневно в ${hour}` : 'выключено'}`,
       ].join('\n'),
       keyboard: new InlineKeyboard()
-        .text('🌐 Сменить язык', 'set:lang')
+        .text('🎯 Изучаемый язык', 'set:target')
+        .text('🌐 Родной язык', 'set:lang')
         .row()
         .text('📆 Повторения', 'set:due')
-        .text('🆕 Новые слова', 'set:new'),
+        .text('🆕 Новые слова', 'set:new')
+        .row()
+        .text(
+          u.notifyEnabled ? '🔕 Выключить напоминание' : '🔔 Включить напоминание',
+          'set:notify',
+        )
+        .row()
+        .text('⏰ Время напоминания', 'set:hour'),
     };
+  };
+
+  const languagePicker = (prompt: string, action: string) => {
+    const keyboard = new InlineKeyboard();
+    const codes = Object.keys(BOT_LANGUAGE_NAMES);
+    for (let i = 0; i < codes.length; i += 2) {
+      for (const code of codes.slice(i, i + 2)) {
+        keyboard.text(BOT_LANGUAGE_NAMES[code]!, `${action}:${code}`);
+      }
+      keyboard.row();
+    }
+    keyboard.text('← Назад', 'set:menu');
+    return { prompt, keyboard };
   };
 
   const showSettings = async (ctx: Context, user: { id: string }) => {
@@ -295,27 +326,71 @@ export function createBot(): Bot {
 
   bot.callbackQuery('set:lang', async (ctx) => {
     await ctx.answerCallbackQuery();
-    const keyboard = new InlineKeyboard();
-    const codes = Object.keys(BOT_LANGUAGE_NAMES);
-    for (let i = 0; i < codes.length; i += 2) {
-      for (const code of codes.slice(i, i + 2)) {
-        keyboard.text(BOT_LANGUAGE_NAMES[code]!, `setlang:${code}`);
-      }
-      keyboard.row();
-    }
-    keyboard.text('← Назад', 'set:menu');
-    await ctx.editMessageText('Родной язык (на него переводятся новые слова):', {
-      reply_markup: keyboard,
-    });
+    const { prompt, keyboard } = languagePicker(
+      'Родной язык (на него переводятся новые слова):',
+      'setlang',
+    );
+    await ctx.editMessageText(prompt, { reply_markup: keyboard });
   });
 
-  bot.callbackQuery(/^setlang:(\w{2})$/, async (ctx) => {
+  bot.callbackQuery('set:target', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const { prompt, keyboard } = languagePicker('Какой язык вы изучаете?', 'settarget');
+    await ctx.editMessageText(prompt, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery(/^set(lang|target):(\w{2})$/, async (ctx) => {
     const user = await resolveUser(ctx);
     await ctx.answerCallbackQuery();
     if (!user) return;
-    const code = ctx.match[1]!;
+    const code = ctx.match[2]!;
     if (!BOT_LANGUAGE_NAMES[code]) return;
-    await prisma.user.update({ where: { id: user.id }, data: { nativeLanguage: code } });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: ctx.match[1] === 'lang' ? { nativeLanguage: code } : { targetLanguage: code },
+    });
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery('set:notify', async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const u = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id },
+      select: { notifyEnabled: true },
+    });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { notifyEnabled: !u.notifyEnabled },
+    });
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery('set:hour', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard();
+    const hours = [6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 22];
+    hours.forEach((h, i) => {
+      keyboard.text(`${String(h).padStart(2, '0')}:00`, `sethour:${h}`);
+      if (i % 4 === 3) keyboard.row();
+    });
+    keyboard.row().text('← Назад', 'set:menu');
+    await ctx.editMessageText('Во сколько присылать напоминание?', { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery(/^sethour:(\d{1,2})$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const hour = Number(ctx.match[1]);
+    if (hour < 0 || hour > 23) return;
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { notifyHour: hour, notifyEnabled: true },
+    });
     const { text, keyboard } = await settingsOverview(user.id);
     await ctx.editMessageText(text, { reply_markup: keyboard });
   });
@@ -461,17 +536,18 @@ export function createBot(): Bot {
 
 // --- Ежедневное уведомление о повторении ---
 
-const NOTIFY_HOUR = 10; // локальное время сервера
 const notifiedOn = new Map<string, string>();
 
 export function startDailyNotifications(bot: Bot): void {
   setInterval(
     async () => {
       const now = new Date();
-      if (now.getHours() !== NOTIFY_HOUR) return;
       const today = now.toDateString();
 
-      const users = await prisma.user.findMany({ select: { id: true, telegramId: true } });
+      const users = await prisma.user.findMany({
+        where: { notifyEnabled: true, notifyHour: now.getHours() },
+        select: { id: true, telegramId: true },
+      });
       for (const user of users) {
         if (notifiedOn.get(user.id) === today) continue;
         const due = await countDue(user.id);

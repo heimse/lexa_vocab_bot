@@ -9,8 +9,10 @@ const MAX_TOOL_ROUNDS = 5;
 
 const systemPrompt = (
   nativeLanguageName: string,
+  targetLanguageName: string,
 ) => `Ты — LEXA, дружелюбный AI-тьютор по иностранным языкам в приложении-словаре.
 Родной язык пользователя — ${nativeLanguageName}. Отвечай на нём, если пользователь не просит иначе.
+Пользователь изучает ${targetLanguageName}.
 У тебя есть инструменты для доступа к личному словарю пользователя: используй их,
 когда вопрос касается его слов, наборов или плана повторений.
 Проверяя пользователя по словам, задавай по одному вопросу за раз и жди ответа.
@@ -139,12 +141,13 @@ export async function chat(
 ): Promise<void> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { nativeLanguage: true },
+    select: { nativeLanguage: true, targetLanguage: true },
   });
-  const languageName = LANGUAGE_NAMES[user?.nativeLanguage ?? 'ru'] ?? 'Russian';
+  const nativeName = LANGUAGE_NAMES[user?.nativeLanguage ?? 'ru'] ?? 'Russian';
+  const targetName = LANGUAGE_NAMES[user?.targetLanguage ?? 'en'] ?? 'English';
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: 'system', content: systemPrompt(languageName) },
+    { role: 'system', content: systemPrompt(nativeName, targetName) },
     ...history,
   ];
 

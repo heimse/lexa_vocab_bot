@@ -284,6 +284,16 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+
+.checkbox-label input {
+  width: auto !important;
+}
+
 .word-actions {
   display: flex;
   align-items: center;
