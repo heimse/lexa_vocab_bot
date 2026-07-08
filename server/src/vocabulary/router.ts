@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { enqueueCardGeneration } from './queue.js';
+import { importEntries, parseEntries } from './service.js';
 
 export const vocabularyRouter = Router();
 
@@ -12,21 +13,6 @@ const importSchema = z.object({
   notebookId: z.string().min(1),
   text: z.string().min(1).max(20000),
 });
-
-/** Разбивает массовый ввод на нормализованные уникальные записи. */
-function parseEntries(text: string): string[] {
-  const seen = new Set<string>();
-  const entries: string[] = [];
-  for (const line of text.split('\n')) {
-    const entry = line.trim().replace(/\s+/g, ' ');
-    if (!entry) continue;
-    const key = entry.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    entries.push(entry);
-  }
-  return entries;
-}
 
 vocabularyRouter.post('/import', async (req, res) => {
   const parsed = importSchema.safeParse(req.body);
@@ -53,39 +39,8 @@ vocabularyRouter.post('/import', async (req, res) => {
     return;
   }
 
-  let created = 0;
-  let linked = 0;
-  const newItemIds: string[] = [];
-
-  for (const entry of entries) {
-    const existing = await prisma.vocabularyItem.findFirst({
-      where: { userId, text: { equals: entry, mode: 'insensitive' } },
-    });
-
-    const item =
-      existing ??
-      (await prisma.vocabularyItem.create({
-        data: { userId, text: entry, aiStatus: 'PENDING' },
-      }));
-
-    if (existing) {
-      linked++;
-    } else {
-      created++;
-      newItemIds.push(item.id);
-    }
-
-    await prisma.notebookItem.upsert({
-      where: {
-        notebookId_vocabularyItemId: { notebookId, vocabularyItemId: item.id },
-      },
-      update: {},
-      create: { notebookId, vocabularyItemId: item.id },
-    });
-  }
-
-  enqueueCardGeneration(newItemIds);
-  res.status(201).json({ created, linked, total: entries.length });
+  const result = await importEntries(userId, notebookId, entries);
+  res.status(201).json(result);
 });
 
 function toCardDto(item: {

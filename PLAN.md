@@ -111,7 +111,7 @@
 
 ---
 
-## Этап 8. Telegram-бот (grammY) ⬜
+## Этап 8. Telegram-бот (grammY) ✅
 
 1. Long polling в dev, webhook в prod. Привязка к аккаунту по `telegram_id`.
 2. Команды: `/start`, `/add <слово|список>` (в набор по умолчанию или выбор набора inline-кнопками), `/review` — повторение прямо в чате (inline-кнопки оценки), `/notebooks`.

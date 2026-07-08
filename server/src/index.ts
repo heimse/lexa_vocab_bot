@@ -8,6 +8,7 @@ import { vocabularyRouter } from './vocabulary/router.js';
 import { reviewRouter } from './review/router.js';
 import { dashboardRouter } from './dashboard/router.js';
 import { aiRouter } from './ai/router.js';
+import { createBot, startDailyNotifications } from './telegram/bot.js';
 import { resumePendingCardGeneration } from './vocabulary/queue.js';
 
 const app = express();
@@ -35,4 +36,11 @@ app.get('/api/health', async (_req, res) => {
 app.listen(PORT, () => {
   console.log(`LEXA API listening on http://localhost:${PORT}`);
   void resumePendingCardGeneration();
+
+  // Telegram-бот: long polling (webhook — на этапе деплоя)
+  const bot = createBot();
+  bot
+    .start({ onStart: (me) => console.log(`Telegram bot @${me.username} started`) })
+    .catch((err) => console.error('Telegram bot failed to start:', err));
+  startDailyNotifications(bot);
 });
