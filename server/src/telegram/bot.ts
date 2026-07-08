@@ -11,6 +11,22 @@ const INBOX_TITLE = 'Telegram';
 // Состояние сессий в памяти процесса (MVP)
 const reviewSessions = new Map<string, { cards: ReviewCard[]; done: number }>();
 const chatHistories = new Map<string, ChatMessage[]>();
+const pendingAdds = new Map<string, string[]>();
+
+const BOT_LANGUAGE_NAMES: Record<string, string> = {
+  ru: 'Русский',
+  en: 'English',
+  uk: 'Українська',
+  pl: 'Polski',
+  de: 'Deutsch',
+  es: 'Español',
+  fr: 'Français',
+  it: 'Italiano',
+  pt: 'Português',
+};
+
+const DUE_PRESETS = [10, 20, 30, 50, 100];
+const NEW_PRESETS = [0, 5, 10, 20, 50];
 
 async function resolveUser(ctx: Context): Promise<{ id: string } | null> {
   const from = ctx.from;
@@ -79,6 +95,13 @@ async function sendNextCard(ctx: Context, userId: string): Promise<void> {
 export function createBot(): Bot {
   const bot = new Bot(config.telegramBotToken);
 
+  void bot.api.setMyCommands([
+    { command: 'add', description: 'Добавить слово или список слов' },
+    { command: 'review', description: 'Повторить слова' },
+    { command: 'notebooks', description: 'Мои наборы' },
+    { command: 'settings', description: 'Настройки' },
+  ]);
+
   bot.command('start', async (ctx) => {
     await resolveUser(ctx);
     await ctx.reply(
@@ -89,6 +112,7 @@ export function createBot(): Bot {
         '/add слово — добавить слово или список слов (каждое с новой строки)',
         '/review — повторить слова',
         '/notebooks — ваши наборы',
+        '/settings — настройки (язык переводов, дневные лимиты)',
         '',
         'Любой другой текст — вопрос AI-тьютору, он знает ваш словарь.',
       ].join('\n'),
@@ -110,11 +134,78 @@ export function createBot(): Bot {
       await ctx.reply('Слишком много слов за раз, лимит — 200.');
       return;
     }
-    const notebookId = await getInboxNotebook(user.id);
-    const result = await importEntries(user.id, notebookId, entries);
+
+    const notebooks = await prisma.notebook.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+    });
+
+    // Наборов ещё нет — кладём во «входящие» без вопросов
+    if (notebooks.length === 0) {
+      const notebookId = await getInboxNotebook(user.id);
+      const result = await importEntries(user.id, notebookId, entries);
+      await ctx.reply(
+        `Принято! Новых слов: ${result.created}, уже были в словаре: ${result.linked}.\n` +
+          `AI заполняет карточки — они появятся в наборе «📥 ${INBOX_TITLE}».`,
+      );
+      return;
+    }
+
+    pendingAdds.set(user.id, entries);
+    const keyboard = new InlineKeyboard();
+    for (const n of notebooks) {
+      keyboard.text(`${n.emoji ?? '📖'} ${n.title}`, `addto:${n.id}`).row();
+    }
+    if (!notebooks.some((n) => n.title === INBOX_TITLE)) {
+      keyboard.text(`📥 ${INBOX_TITLE} (создать)`, 'addto:inbox').row();
+    }
+    keyboard.text('✖️ Отмена', 'addcancel');
     await ctx.reply(
-      `Принято! Новых слов: ${result.created}, уже были в словаре: ${result.linked}.\n` +
-        `AI заполняет карточки — они появятся в наборе «📥 ${INBOX_TITLE}».`,
+      `Куда добавить ${entries.length === 1 ? `«${entries[0]}»` : `слова (${entries.length})`}?`,
+      { reply_markup: keyboard },
+    );
+  });
+
+  bot.callbackQuery('addcancel', async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (user) pendingAdds.delete(user.id);
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText('Отменено.');
+  });
+
+  bot.callbackQuery(/^addto:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const entries = pendingAdds.get(user.id);
+    if (!entries) {
+      await ctx.editMessageText('Список устарел — отправьте /add заново.');
+      return;
+    }
+
+    let notebookId: string;
+    let label: string;
+    if (ctx.match[1] === 'inbox') {
+      notebookId = await getInboxNotebook(user.id);
+      label = `📥 ${INBOX_TITLE}`;
+    } else {
+      const notebook = await prisma.notebook.findFirst({
+        where: { id: ctx.match[1], userId: user.id },
+      });
+      if (!notebook) {
+        await ctx.editMessageText('Набор не найден — отправьте /add заново.');
+        return;
+      }
+      notebookId = notebook.id;
+      label = `${notebook.emoji ?? '📖'} ${notebook.title}`;
+    }
+
+    pendingAdds.delete(user.id);
+    const result = await importEntries(user.id, notebookId, entries);
+    await ctx.editMessageText(
+      `Принято в «${label}»! Новых слов: ${result.created}, уже были в словаре: ${result.linked}.\n` +
+        'AI заполняет карточки.',
     );
   });
 
@@ -135,6 +226,101 @@ export function createBot(): Bot {
     await ctx.reply(
       notebooks.map((n) => `${n.emoji ?? '📖'} ${n.title} — ${n._count.items} слов`).join('\n'),
     );
+  });
+
+  const settingsOverview = async (userId: string) => {
+    const u = await prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { nativeLanguage: true, dailyDueLimit: true, dailyNewLimit: true },
+    });
+    return {
+      text: [
+        '⚙️ Настройки',
+        '',
+        `🌐 Родной язык: ${BOT_LANGUAGE_NAMES[u.nativeLanguage] ?? u.nativeLanguage}`,
+        `📆 Повторений в день: ${u.dailyDueLimit}`,
+        `🆕 Новых слов в день: ${u.dailyNewLimit}`,
+      ].join('\n'),
+      keyboard: new InlineKeyboard()
+        .text('🌐 Сменить язык', 'set:lang')
+        .row()
+        .text('📆 Повторения', 'set:due')
+        .text('🆕 Новые слова', 'set:new'),
+    };
+  };
+
+  bot.command('settings', async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return;
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.reply(text, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery('set:menu', async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery('set:lang', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const keyboard = new InlineKeyboard();
+    const codes = Object.keys(BOT_LANGUAGE_NAMES);
+    for (let i = 0; i < codes.length; i += 2) {
+      for (const code of codes.slice(i, i + 2)) {
+        keyboard.text(BOT_LANGUAGE_NAMES[code]!, `setlang:${code}`);
+      }
+      keyboard.row();
+    }
+    keyboard.text('← Назад', 'set:menu');
+    await ctx.editMessageText('Родной язык (на него переводятся новые слова):', {
+      reply_markup: keyboard,
+    });
+  });
+
+  bot.callbackQuery(/^setlang:(\w{2})$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const code = ctx.match[1]!;
+    if (!BOT_LANGUAGE_NAMES[code]) return;
+    await prisma.user.update({ where: { id: user.id }, data: { nativeLanguage: code } });
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  });
+
+  const limitPicker = (label: string, presets: number[], action: string) => {
+    const keyboard = new InlineKeyboard();
+    for (const n of presets) keyboard.text(String(n), `${action}:${n}`);
+    keyboard.row().text('← Назад', 'set:menu');
+    return { label, keyboard };
+  };
+
+  bot.callbackQuery('set:due', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const { label, keyboard } = limitPicker('Максимум повторений в день:', DUE_PRESETS, 'setdue');
+    await ctx.editMessageText(label, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery('set:new', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const { label, keyboard } = limitPicker('Максимум новых слов в день:', NEW_PRESETS, 'setnew');
+    await ctx.editMessageText(label, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery(/^set(due|new):(\d+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const value = Number(ctx.match[2]);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: ctx.match[1] === 'due' ? { dailyDueLimit: value || 1 } : { dailyNewLimit: value },
+    });
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.editMessageText(text, { reply_markup: keyboard });
   });
 
   bot.command('review', async (ctx) => {
