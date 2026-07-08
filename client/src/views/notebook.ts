@@ -41,6 +41,14 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
         <span class="muted">${notebook.items.length} слов</span>
       </div>
       ${notebook.description ? `<p class="muted">${esc(notebook.description)}</p>` : ''}
+      ${
+        notebook.items.length > 0
+          ? `<p class="muted">Экспорт:
+              <a href="/api/notebooks/${notebook.id}/export?format=csv">CSV</a> ·
+              <a href="/api/notebooks/${notebook.id}/export?format=txt">TXT</a> ·
+              <a href="/api/notebooks/${notebook.id}/export?format=pdf">PDF</a></p>`
+          : ''
+      }
       <form id="import-form" class="import-form">
         <textarea id="import-text" rows="5"
           placeholder="Вставьте слова или фразы — по одному на строку:&#10;&#10;destiny&#10;look forward to&#10;by the way"></textarea>

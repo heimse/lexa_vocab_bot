@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
+import { toCsv, toTxt, streamPdf } from './export.js';
 
 export const notebooksRouter = Router();
 
@@ -75,6 +76,60 @@ notebooksRouter.get('/:id', async (req, res) => {
       addedAt,
     })),
   });
+});
+
+notebooksRouter.get('/:id/export', async (req, res) => {
+  const format = String(req.query.format ?? 'csv');
+  if (!['csv', 'txt', 'pdf'].includes(format)) {
+    res.status(400).json({ error: 'Unknown format, use csv, txt or pdf' });
+    return;
+  }
+
+  const notebook = await prisma.notebook.findFirst({
+    where: { id: req.params.id, userId: req.userId! },
+    include: {
+      items: {
+        orderBy: { addedAt: 'asc' },
+        include: { vocabularyItem: true },
+      },
+    },
+  });
+  if (!notebook) {
+    res.status(404).json({ error: 'Notebook not found' });
+    return;
+  }
+
+  const items = notebook.items.map(({ vocabularyItem: item }) => ({
+    text: item.text,
+    language: item.language,
+    translation: item.translation,
+    partOfSpeech: item.partOfSpeech,
+    level: item.level,
+    explanation: item.explanation,
+    examples: item.examples,
+    synonyms: item.synonyms,
+    antonyms: item.antonyms,
+  }));
+
+  const safeName = notebook.title.replace(/[^\p{L}\p{N} _-]/gu, '').trim() || 'notebook';
+  const filename = encodeURIComponent(`${safeName}.${format}`);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="lexa.${format}"; filename*=UTF-8''${filename}`,
+  );
+
+  switch (format) {
+    case 'csv':
+      res.type('text/csv; charset=utf-8').send(toCsv(items));
+      break;
+    case 'txt':
+      res.type('text/plain; charset=utf-8').send(toTxt(notebook.title, items));
+      break;
+    case 'pdf':
+      res.type('application/pdf');
+      streamPdf(res, notebook.title, items);
+      break;
+  }
 });
 
 notebooksRouter.patch('/:id', async (req, res) => {
