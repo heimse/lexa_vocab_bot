@@ -304,6 +304,78 @@ a:hover {
   color: #ff8a95;
 }
 
+/* --- Dashboard --- */
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+.stat-tile {
+  border: 1px solid #1f2430;
+  border-radius: 12px;
+  background: #151923;
+  padding: 1rem 1.25rem;
+}
+
+.stat-accent {
+  border-color: #3450a3;
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.stat-label {
+  color: #9aa0aa;
+  font-size: 0.875rem;
+}
+
+.status-row {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0 1.5rem;
+}
+
+.status-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.status-count {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.all-link {
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+.card-link {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  color: inherit;
+}
+
+.card-link:hover {
+  text-decoration: none;
+}
+
+a.btn {
+  display: inline-block;
+}
+
+a.btn:hover {
+  text-decoration: none;
+}
+
 /* --- Review --- */
 
 .topbar-nav {

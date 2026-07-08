@@ -6,6 +6,7 @@ import { renderNotebooks } from './views/notebooks.js';
 import { renderNotebook } from './views/notebook.js';
 import { renderWord } from './views/word.js';
 import { renderReview } from './views/review.js';
+import { renderDashboard } from './views/dashboard.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -15,6 +16,7 @@ function renderLayout(user: CurrentUser): HTMLElement {
     <header class="topbar">
       <nav class="topbar-nav">
         <a class="logo" href="#/">LEXA</a>
+        <a href="#/notebooks">Наборы</a>
         <a href="#/review">Повторение</a>
       </nav>
       <div class="topbar-right">
@@ -37,7 +39,8 @@ async function start(): Promise<void> {
     const user = await api<CurrentUser>('/api/auth/me');
     const view = renderLayout(user);
     initRouter(view, [
-      { pattern: /^#\/$/, render: renderNotebooks },
+      { pattern: /^#\/$/, render: renderDashboard },
+      { pattern: /^#\/notebooks$/, render: renderNotebooks },
       { pattern: /^#\/notebooks\/([\w-]+)$/, render: renderNotebook },
       { pattern: /^#\/words\/([\w-]+)$/, render: renderWord },
       { pattern: /^#\/review$/, render: renderReview },

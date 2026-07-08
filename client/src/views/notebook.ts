@@ -22,7 +22,7 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
     notebook = await api<NotebookDetail>(`/api/notebooks/${id}`);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
-      container.innerHTML = `<p>Набор не найден. <a href="#/">К списку наборов</a></p>`;
+      container.innerHTML = `<p>Набор не найден. <a href="#/notebooks">К списку наборов</a></p>`;
       return;
     }
     throw err;
@@ -35,7 +35,7 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
 
   container.innerHTML = `
     <section class="page">
-      <p><a href="#/">← Все наборы</a></p>
+      <p><a href="#/notebooks">← Все наборы</a></p>
       <div class="page-header">
         <h2>${esc(notebook.emoji) || '📖'} ${esc(notebook.title)}</h2>
         <span class="muted">${notebook.items.length} слов</span>

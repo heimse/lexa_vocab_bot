@@ -19,7 +19,7 @@ export async function renderReview(container: HTMLElement): Promise<void> {
       <section class="page review-page">
         <h2>Повторение</h2>
         <p>🎉 На сегодня всё! Нет слов для повторения.</p>
-        <p><a href="#/">К наборам</a></p>
+        <p><a href="#/">На главную</a></p>
       </section>
     `;
     return;
@@ -35,7 +35,7 @@ export async function renderReview(container: HTMLElement): Promise<void> {
         <section class="page review-page">
           <h2>Готово! 🎉</h2>
           <p>Повторено карточек: ${done}.</p>
-          <p><a href="#/">К наборам</a></p>
+          <p><a href="#/">На главную</a></p>
         </section>
       `;
       return;
