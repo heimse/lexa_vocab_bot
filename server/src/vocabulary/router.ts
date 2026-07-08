@@ -83,6 +83,37 @@ function toCardDto(item: {
   };
 }
 
+// До '/:id', иначе «search» матчится как id
+vocabularyRouter.get('/search', async (req, res) => {
+  const query = String(req.query.q ?? '').trim();
+  if (query.length < 2) {
+    res.json([]);
+    return;
+  }
+  const items = await prisma.vocabularyItem.findMany({
+    where: {
+      userId: req.userId!,
+      OR: [
+        { text: { contains: query, mode: 'insensitive' } },
+        { translation: { contains: query, mode: 'insensitive' } },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 50,
+    select: {
+      id: true,
+      text: true,
+      language: true,
+      translation: true,
+      partOfSpeech: true,
+      level: true,
+      status: true,
+      aiStatus: true,
+    },
+  });
+  res.json(items);
+});
+
 vocabularyRouter.get('/:id', async (req, res) => {
   const item = await prisma.vocabularyItem.findFirst({
     where: { id: req.params.id, userId: req.userId! },

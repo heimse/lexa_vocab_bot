@@ -55,6 +55,8 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
         notebook.items.length === 0
           ? '<p class="muted">В наборе пока нет слов.</p>'
           : `
+      <input id="filter-input" class="search-input" type="search"
+        placeholder="Фильтр по слову или переводу…" autocomplete="off" />
       <table class="word-table">
         <thead>
           <tr><th>Слово</th><th>Перевод</th><th>Часть речи</th><th>Уровень</th><th></th></tr>
@@ -63,7 +65,7 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
           ${notebook.items
             .map(
               (w) => `
-            <tr>
+            <tr data-search="${esc(`${w.text} ${w.translation ?? ''}`.toLowerCase())}">
               <td class="word-text"><a href="#/words/${w.id}">${esc(w.text)}</a></td>
               <td>${esc(w.translation) || '—'}</td>
               <td>${esc(w.partOfSpeech) || '—'}</td>
@@ -80,6 +82,14 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
 
   const textarea = container.querySelector<HTMLTextAreaElement>('#import-text')!;
   textarea.value = draft;
+
+  const filterInput = container.querySelector<HTMLInputElement>('#filter-input');
+  filterInput?.addEventListener('input', () => {
+    const query = filterInput.value.trim().toLowerCase();
+    container.querySelectorAll<HTMLTableRowElement>('tr[data-search]').forEach((row) => {
+      row.hidden = query !== '' && !row.dataset.search!.includes(query);
+    });
+  });
 
   container
     .querySelector<HTMLFormElement>('#import-form')!

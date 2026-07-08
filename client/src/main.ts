@@ -9,6 +9,7 @@ import { renderReview } from './views/review.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderChat } from './views/chat.js';
 import { renderSettings } from './views/settings.js';
+import { renderSearch } from './views/search.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -21,6 +22,7 @@ function renderLayout(user: CurrentUser): HTMLElement {
         <a href="#/notebooks">Наборы</a>
         <a href="#/review">Повторение</a>
         <a href="#/chat">AI Chat</a>
+        <a href="#/search">Поиск</a>
       </nav>
       <div class="topbar-right">
         <a href="#/settings" title="Настройки">⚙️</a>
@@ -50,6 +52,7 @@ async function start(): Promise<void> {
       { pattern: /^#\/review$/, render: renderReview },
       { pattern: /^#\/chat$/, render: renderChat },
       { pattern: /^#\/settings$/, render: renderSettings },
+      { pattern: /^#\/search$/, render: renderSearch },
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
