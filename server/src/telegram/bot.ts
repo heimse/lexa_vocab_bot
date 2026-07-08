@@ -12,7 +12,8 @@ const INBOX_TITLE = 'Telegram';
 const reviewSessions = new Map<string, { cards: ReviewCard[]; done: number }>();
 const chatHistories = new Map<string, ChatMessage[]>();
 const pendingAdds = new Map<string, string[]>();
-const awaitingWords = new Set<string>();
+// Ждём список слов; если указан notebookId — кладём сразу в него, без выбора
+const awaitingWords = new Map<string, { notebookId?: string; label?: string }>();
 // Ждём название нового набора; entries — слова, которые надо в него положить
 const awaitingNotebookTitle = new Map<string, { entries?: string[] }>();
 
@@ -149,16 +150,29 @@ export function createBot(): Bot {
     );
   });
 
-  const startAddFlow = async (ctx: Context, user: { id: string }, text: string) => {
+  const startAddFlow = async (
+    ctx: Context,
+    user: { id: string },
+    text: string,
+    target?: { notebookId: string; label: string },
+  ) => {
     const entries = parseEntries(text);
     if (entries.length === 0) {
-      await ctx.reply(
-        'Напишите слова после команды:\n/add compelling\nили списком, по одному на строку.',
-      );
+      await ctx.reply('Не нашёл слов в сообщении. Отправьте слова по одному на строку.');
       return;
     }
     if (entries.length > 200) {
       await ctx.reply('Слишком много слов за раз, лимит — 200.');
+      return;
+    }
+
+    // Набор уже выбран — добавляем без вопросов
+    if (target) {
+      const result = await importEntries(user.id, target.notebookId, entries);
+      await ctx.reply(
+        `Принято в «${target.label}»! Новых слов: ${result.created}, уже были в словаре: ${result.linked}.\n` +
+          'AI заполняет карточки.',
+      );
       return;
     }
 
@@ -198,6 +212,11 @@ export function createBot(): Bot {
   bot.command('add', async (ctx) => {
     const user = await resolveUser(ctx);
     if (!user) return;
+    if (!ctx.match.trim()) {
+      awaitingWords.set(user.id, {});
+      await ctx.reply('Отправьте слова или фразы — по одному на строку. Потом выберете набор.');
+      return;
+    }
     await startAddFlow(ctx, user, ctx.match);
   });
 
@@ -558,8 +577,8 @@ export function createBot(): Bot {
         await showSettings(ctx, user);
         return;
       case BUTTONS.add:
-        awaitingWords.add(user.id);
-        await ctx.reply('Отправьте слова или фразы — по одному на строку.');
+        awaitingWords.set(user.id, {});
+        await ctx.reply('Отправьте слова или фразы — по одному на строку. Потом выберете набор.');
         return;
     }
 
@@ -584,14 +603,27 @@ export function createBot(): Bot {
             'AI заполняет карточки.',
         );
       } else {
-        await ctx.reply(`Набор «${label}» создан! Добавьте в него слова: ➕ Добавить слова`);
+        // Сразу ждём слова в свежесозданный набор
+        awaitingWords.set(user.id, { notebookId: notebook.id, label });
+        await ctx.reply(
+          `Набор «${label}» создан! Теперь отправьте слова — по одному на строку, я добавлю их прямо в него.`,
+        );
       }
       return;
     }
 
-    // Ждём список слов после нажатия «Добавить слова»
-    if (awaitingWords.delete(user.id)) {
-      await startAddFlow(ctx, user, text);
+    // Ждём список слов (после «Добавить слова», /add или создания набора)
+    const addTarget = awaitingWords.get(user.id);
+    if (addTarget) {
+      awaitingWords.delete(user.id);
+      await startAddFlow(
+        ctx,
+        user,
+        text,
+        addTarget.notebookId && addTarget.label
+          ? { notebookId: addTarget.notebookId, label: addTarget.label }
+          : undefined,
+      );
       return;
     }
 
