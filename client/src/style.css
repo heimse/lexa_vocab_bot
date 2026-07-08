@@ -304,6 +304,76 @@ a:hover {
   color: #ff8a95;
 }
 
+/* --- Review --- */
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.review-page {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.review-card {
+  border: 1px solid #1f2430;
+  border-radius: 16px;
+  background: #151923;
+  padding: 2.5rem 2rem;
+  margin: 1.5rem 0;
+  min-height: 220px;
+}
+
+.review-word {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.review-answer {
+  margin-top: 1.5rem;
+  border-top: 1px solid #1f2430;
+  padding-top: 1.5rem;
+  text-align: left;
+}
+
+.review-translation {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.review-examples {
+  margin: 0.75rem 0;
+  padding-left: 1.25rem;
+  color: #c3c8d2;
+}
+
+.review-controls {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.rate-again {
+  border-color: #7a2b35;
+}
+
+.rate-hard {
+  border-color: #7a5c2b;
+}
+
+.rate-good {
+  border-color: #2b7a4b;
+}
+
+.rate-easy {
+  border-color: #2b5c7a;
+}
+
 /* --- Word table --- */
 
 .word-table {

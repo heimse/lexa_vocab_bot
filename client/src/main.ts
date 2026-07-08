@@ -5,6 +5,7 @@ import { renderLogin } from './views/login.js';
 import { renderNotebooks } from './views/notebooks.js';
 import { renderNotebook } from './views/notebook.js';
 import { renderWord } from './views/word.js';
+import { renderReview } from './views/review.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -12,7 +13,10 @@ function renderLayout(user: CurrentUser): HTMLElement {
   const name = user.firstName ?? user.username ?? 'пользователь';
   root.innerHTML = `
     <header class="topbar">
-      <a class="logo" href="#/">LEXA</a>
+      <nav class="topbar-nav">
+        <a class="logo" href="#/">LEXA</a>
+        <a href="#/review">Повторение</a>
+      </nav>
       <div class="topbar-right">
         <span class="muted">${esc(name)}</span>
         <button class="btn btn-small" id="logout">Выйти</button>
@@ -36,6 +40,7 @@ async function start(): Promise<void> {
       { pattern: /^#\/$/, render: renderNotebooks },
       { pattern: /^#\/notebooks\/([\w-]+)$/, render: renderNotebook },
       { pattern: /^#\/words\/([\w-]+)$/, render: renderWord },
+      { pattern: /^#\/review$/, render: renderReview },
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {

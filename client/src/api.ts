@@ -79,6 +79,26 @@ export interface ImportResult {
   total: number;
 }
 
+export interface ReviewCard {
+  id: string;
+  text: string;
+  language: string | null;
+  translation: string | null;
+  partOfSpeech: string | null;
+  explanation: string | null;
+  examples: string[];
+  synonyms: string[];
+  level: string | null;
+  state: number;
+  due: string;
+}
+
+export interface ReviewQueue {
+  due: ReviewCard[];
+  fresh: ReviewCard[];
+  total: number;
+}
+
 export interface NotebookDetail {
   id: string;
   title: string;

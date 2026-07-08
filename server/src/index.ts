@@ -5,6 +5,7 @@ import { config } from './config.js';
 import { authRouter } from './auth/router.js';
 import { notebooksRouter } from './notebooks/router.js';
 import { vocabularyRouter } from './vocabulary/router.js';
+import { reviewRouter } from './review/router.js';
 import { resumePendingCardGeneration } from './vocabulary/queue.js';
 
 const app = express();
@@ -16,6 +17,7 @@ app.use(cookieParser());
 app.use('/api/auth', authRouter);
 app.use('/api/notebooks', notebooksRouter);
 app.use('/api/vocabulary', vocabularyRouter);
+app.use('/api/review', reviewRouter);
 
 app.get('/api/health', async (_req, res) => {
   try {
