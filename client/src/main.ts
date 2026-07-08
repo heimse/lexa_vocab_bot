@@ -8,6 +8,7 @@ import { renderWord } from './views/word.js';
 import { renderReview } from './views/review.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderChat } from './views/chat.js';
+import { renderSettings } from './views/settings.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -22,6 +23,7 @@ function renderLayout(user: CurrentUser): HTMLElement {
         <a href="#/chat">AI Chat</a>
       </nav>
       <div class="topbar-right">
+        <a href="#/settings" title="Настройки">⚙️</a>
         <span class="muted">${esc(name)}</span>
         <button class="btn btn-small" id="logout">Выйти</button>
       </div>
@@ -47,6 +49,7 @@ async function start(): Promise<void> {
       { pattern: /^#\/words\/([\w-]+)$/, render: renderWord },
       { pattern: /^#\/review$/, render: renderReview },
       { pattern: /^#\/chat$/, render: renderChat },
+      { pattern: /^#\/settings$/, render: renderSettings },
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {

@@ -1,13 +1,16 @@
 import OpenAI from 'openai';
 import { prisma } from '../db.js';
 import { config } from '../config.js';
+import { LANGUAGE_NAMES } from './cards.js';
 
 const openai = new OpenAI({ apiKey: config.openaiApiKey });
 
 const MAX_TOOL_ROUNDS = 5;
 
-const SYSTEM_PROMPT = `Ты — LEXA, дружелюбный AI-тьютор по иностранным языкам в приложении-словаре.
-Родной язык пользователя — русский. Отвечай на русском, если пользователь не просит иначе.
+const systemPrompt = (
+  nativeLanguageName: string,
+) => `Ты — LEXA, дружелюбный AI-тьютор по иностранным языкам в приложении-словаре.
+Родной язык пользователя — ${nativeLanguageName}. Отвечай на нём, если пользователь не просит иначе.
 У тебя есть инструменты для доступа к личному словарю пользователя: используй их,
 когда вопрос касается его слов, наборов или плана повторений.
 Проверяя пользователя по словам, задавай по одному вопросу за раз и жди ответа.
@@ -134,8 +137,14 @@ export async function chat(
   history: ChatMessage[],
   onDelta: (text: string) => void,
 ): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { nativeLanguage: true },
+  });
+  const languageName = LANGUAGE_NAMES[user?.nativeLanguage ?? 'ru'] ?? 'Russian';
+
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemPrompt(languageName) },
     ...history,
   ];
 

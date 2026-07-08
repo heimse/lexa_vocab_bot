@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/require-auth.js';
+import { logger } from '../logger.js';
 import { chat } from './chat.js';
 
 export const aiRouter = Router();
@@ -39,7 +40,7 @@ aiRouter.post('/chat', async (req, res) => {
     await chat(req.userId!, parsed.data.messages, (text) => send({ delta: text }));
     send({ done: true });
   } catch (err) {
-    console.error('AI chat error:', err);
+    logger.error({ err }, 'AI chat error');
     send({ error: 'Ошибка AI, попробуйте ещё раз' });
   } finally {
     res.end();

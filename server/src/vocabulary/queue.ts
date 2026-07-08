@@ -1,5 +1,6 @@
 import { prisma } from '../db.js';
 import { generateCard } from '../ai/cards.js';
+import { logger } from '../logger.js';
 
 const MAX_ATTEMPTS = 3;
 
@@ -21,7 +22,7 @@ export async function resumePendingCardGeneration(): Promise<void> {
     orderBy: { createdAt: 'asc' },
   });
   if (pending.length > 0) {
-    console.log(`AI queue: resuming ${pending.length} pending item(s)`);
+    logger.info(`AI queue: resuming ${pending.length} pending item(s)`);
     enqueueCardGeneration(pending.map((p) => p.id));
   }
 }
@@ -40,13 +41,16 @@ async function run(): Promise<void> {
 }
 
 async function processItem(id: string): Promise<void> {
-  const item = await prisma.vocabularyItem.findUnique({ where: { id } });
+  const item = await prisma.vocabularyItem.findUnique({
+    where: { id },
+    include: { user: { select: { nativeLanguage: true } } },
+  });
   if (!item || item.aiStatus === 'READY') return;
 
   let lastError: unknown;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      const card = await generateCard(item.text);
+      const card = await generateCard(item.text, item.user.nativeLanguage);
       await prisma.vocabularyItem.update({
         where: { id },
         data: {
@@ -69,7 +73,7 @@ async function processItem(id: string): Promise<void> {
   }
 
   const message = lastError instanceof Error ? lastError.message : String(lastError);
-  console.error(`AI queue: failed to generate card for "${item.text}": ${message}`);
+  logger.error(`AI queue: failed to generate card for "${item.text}": ${message}`);
   await prisma.vocabularyItem.update({
     where: { id },
     data: { aiStatus: 'FAILED', aiError: message.slice(0, 500) },

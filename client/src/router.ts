@@ -19,7 +19,15 @@ export async function renderCurrent(): Promise<void> {
   for (const route of routes) {
     const match = hash.match(route.pattern);
     if (match) {
-      await route.render(container, match.slice(1));
+      container.innerHTML = `<p class="muted loading">Загрузка…</p>`;
+      try {
+        await route.render(container, match.slice(1));
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = `
+          <p class="error">Что-то пошло не так. Попробуйте обновить страницу.</p>
+          <p><a href="#/">На главную</a></p>`;
+      }
       return;
     }
   }

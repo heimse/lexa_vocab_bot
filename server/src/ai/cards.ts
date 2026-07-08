@@ -32,7 +32,7 @@ const JSON_SCHEMA = {
     },
     translation: {
       type: 'string',
-      description: '1-3 best translations into Russian, comma-separated',
+      description: "1-3 best translations into the learner's native language, comma-separated",
     },
     explanation: {
       type: 'string',
@@ -71,17 +71,31 @@ const JSON_SCHEMA = {
   ],
 } as const;
 
-const SYSTEM_PROMPT = `You are a professional lexicographer for a vocabulary learning app.
-The learner's native language is Russian.
+export const LANGUAGE_NAMES: Record<string, string> = {
+  ru: 'Russian',
+  en: 'English',
+  uk: 'Ukrainian',
+  pl: 'Polish',
+  de: 'German',
+  es: 'Spanish',
+  fr: 'French',
+  it: 'Italian',
+  pt: 'Portuguese',
+};
+
+const systemPrompt = (
+  nativeLanguage: string,
+) => `You are a professional lexicographer for a vocabulary learning app.
+The learner's native language is ${LANGUAGE_NAMES[nativeLanguage] ?? 'Russian'}: translate into it.
 Given a word, phrase, idiom or phrasal verb, produce a dictionary card for it.
 Detect the language of the entry yourself. Keep explanations short and simple.
 If the entry contains a typo, correct it silently and describe the corrected form.`;
 
-export async function generateCard(text: string): Promise<GeneratedCard> {
+export async function generateCard(text: string, nativeLanguage = 'ru'): Promise<GeneratedCard> {
   const response = await openai.chat.completions.create({
     model: config.openaiModel,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt(nativeLanguage) },
       { role: 'user', content: text },
     ],
     response_format: {

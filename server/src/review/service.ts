@@ -2,9 +2,6 @@ import { prisma } from '../db.js';
 import { applyReview } from './fsrs.js';
 import type { ReviewRating } from '../generated/prisma/client.js';
 
-const DUE_LIMIT = 20;
-const NEW_LIMIT = 10;
-
 const cardSelect = {
   id: true,
   text: true,
@@ -24,17 +21,22 @@ export type ReviewCard = Awaited<ReturnType<typeof getReviewQueue>>['due'][numbe
 export async function getReviewQueue(userId: string) {
   const now = new Date();
 
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { dailyDueLimit: true, dailyNewLimit: true },
+  });
+
   const due = await prisma.vocabularyItem.findMany({
     where: { userId, aiStatus: 'READY', state: { gt: 0 }, due: { lte: now } },
     orderBy: { due: 'asc' },
-    take: DUE_LIMIT,
+    take: user?.dailyDueLimit ?? 20,
     select: cardSelect,
   });
 
   const fresh = await prisma.vocabularyItem.findMany({
     where: { userId, aiStatus: 'READY', state: 0 },
     orderBy: { createdAt: 'asc' },
-    take: NEW_LIMIT,
+    take: user?.dailyNewLimit ?? 10,
     select: cardSelect,
   });
 

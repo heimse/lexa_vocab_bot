@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard, type Context } from 'grammy';
 import { prisma } from '../db.js';
+import { logger } from '../logger.js';
 import { config } from '../config.js';
 import { parseEntries, importEntries } from '../vocabulary/service.js';
 import { getReviewQueue, submitReview, countDue, type ReviewCard } from '../review/service.js';
@@ -198,7 +199,7 @@ export function createBot(): Bot {
         answer += delta;
       });
     } catch (err) {
-      console.error('Telegram AI chat error:', err);
+      logger.error({ err }, 'Telegram AI chat error');
       await ctx.reply('Ошибка AI, попробуйте ещё раз.');
       return;
     }
@@ -208,7 +209,7 @@ export function createBot(): Bot {
   });
 
   bot.catch((err) => {
-    console.error('Telegram bot error:', err.error);
+    logger.error({ err: err.error }, 'Telegram bot error');
   });
 
   return bot;

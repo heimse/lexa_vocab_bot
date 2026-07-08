@@ -48,6 +48,11 @@ model User {
   photoUrl   String?  @map("photo_url")
   createdAt  DateTime @default(now()) @map("created_at")
 
+  // Настройки
+  nativeLanguage String @default("ru") @map("native_language") // ISO 639-1, язык переводов
+  dailyDueLimit  Int    @default(20) @map("daily_due_limit")
+  dailyNewLimit  Int    @default(10) @map("daily_new_limit")
+
   notebooks       Notebook[]
   vocabularyItems VocabularyItem[]
 
