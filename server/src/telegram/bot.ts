@@ -13,6 +13,18 @@ const reviewSessions = new Map<string, { cards: ReviewCard[]; done: number }>();
 const chatHistories = new Map<string, ChatMessage[]>();
 const pendingAdds = new Map<string, string[]>();
 const awaitingWords = new Set<string>();
+// Ждём название нового набора; entries — слова, которые надо в него положить
+const awaitingNotebookTitle = new Map<string, { entries?: string[] }>();
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const mod10 = n % 10;
+  const mod100 = n % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+
+const wordsCount = (n: number) => `${n} ${plural(n, 'слово', 'слова', 'слов')}`;
 
 const BUTTONS = {
   review: '🔁 Повторение',
@@ -175,6 +187,7 @@ export function createBot(): Bot {
     if (!notebooks.some((n) => n.title === INBOX_TITLE)) {
       keyboard.text(`📥 ${INBOX_TITLE} (создать)`, 'addto:inbox').row();
     }
+    keyboard.text('➕ Новый набор', 'addto:new').row();
     keyboard.text('✖️ Отмена', 'addcancel');
     await ctx.reply(
       `Куда добавить ${entries.length === 1 ? `«${entries[0]}»` : `слова (${entries.length})`}?`,
@@ -202,6 +215,15 @@ export function createBot(): Bot {
     const entries = pendingAdds.get(user.id);
     if (!entries) {
       await ctx.editMessageText('Список устарел — отправьте /add заново.');
+      return;
+    }
+
+    if (ctx.match[1] === 'new') {
+      awaitingNotebookTitle.set(user.id, { entries });
+      pendingAdds.delete(user.id);
+      await ctx.editMessageText(
+        'Как назвать новый набор? Можно с эмодзи в начале, например:\n📚 Ведьмак',
+      );
       return;
     }
 
@@ -236,16 +258,26 @@ export function createBot(): Bot {
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { items: true } } },
     });
+    const createKeyboard = new InlineKeyboard().text('➕ Создать набор', 'nb:new');
     if (notebooks.length === 0) {
-      await ctx.reply(
-        'Наборов пока нет. Добавьте слова через /add — я создам набор автоматически.',
-      );
+      await ctx.reply('Наборов пока нет.', { reply_markup: createKeyboard });
       return;
     }
     await ctx.reply(
-      notebooks.map((n) => `${n.emoji ?? '📖'} ${n.title} — ${n._count.items} слов`).join('\n'),
+      notebooks
+        .map((n) => `${n.emoji ?? '📖'} ${n.title} — ${wordsCount(n._count.items)}`)
+        .join('\n'),
+      { reply_markup: createKeyboard },
     );
   };
+
+  bot.callbackQuery('nb:new', async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    awaitingNotebookTitle.set(user.id, {});
+    await ctx.reply('Как назвать новый набор? Можно с эмодзи в начале, например:\n📚 Ведьмак');
+  });
 
   bot.command('notebooks', async (ctx) => {
     const user = await resolveUser(ctx);
@@ -501,6 +533,32 @@ export function createBot(): Bot {
         return;
     }
 
+    // Ждём название нового набора
+    const pendingNotebook = awaitingNotebookTitle.get(user.id);
+    if (pendingNotebook) {
+      awaitingNotebookTitle.delete(user.id);
+      const match = text.trim().match(/^(\p{Extended_Pictographic}(?:️)?)?\s*(.{1,100})$/su);
+      const title = match?.[2]?.trim();
+      if (!title) {
+        await ctx.reply('Название не подошло — попробуйте ещё раз (до 100 символов).');
+        return;
+      }
+      const notebook = await prisma.notebook.create({
+        data: { userId: user.id, title, emoji: match?.[1] ?? null },
+      });
+      const label = `${notebook.emoji ?? '📖'} ${notebook.title}`;
+      if (pendingNotebook.entries?.length) {
+        const result = await importEntries(user.id, notebook.id, pendingNotebook.entries);
+        await ctx.reply(
+          `Набор «${label}» создан! Новых слов: ${result.created}, уже были в словаре: ${result.linked}.\n` +
+            'AI заполняет карточки.',
+        );
+      } else {
+        await ctx.reply(`Набор «${label}» создан! Добавьте в него слова: ➕ Добавить слова`);
+      }
+      return;
+    }
+
     // Ждём список слов после нажатия «Добавить слова»
     if (awaitingWords.delete(user.id)) {
       await startAddFlow(ctx, user, text);
@@ -528,6 +586,8 @@ export function createBot(): Bot {
   });
 
   bot.catch((err) => {
+    // Повторное нажатие кнопки, не меняющее сообщение, — не ошибка
+    if (err.message.includes('message is not modified')) return;
     logger.error({ err: err.error }, 'Telegram bot error');
   });
 
