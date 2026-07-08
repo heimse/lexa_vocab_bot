@@ -71,11 +71,25 @@ export async function renderSettings(container: HTMLElement): Promise<void> {
         </div>
       </form>
       <p class="muted">Изучаемый и родной языки влияют на заполнение новых карточек и AI-тьютора.</p>
+      <hr class="divider" />
+      <button class="btn btn-danger" id="wipe-account">🗑 Удалить все мои данные</button>
+      <p class="muted">Сотрёт наборы, слова и историю повторений. Действие необратимо.</p>
     </section>
   `;
 
   const form = container.querySelector<HTMLFormElement>('#settings-form')!;
   const status = container.querySelector<HTMLSpanElement>('#settings-status')!;
+
+  container
+    .querySelector<HTMLButtonElement>('#wipe-account')!
+    .addEventListener('click', async () => {
+      if (!confirm('Удалить ВСЕ данные: наборы, слова и историю повторений? Это необратимо.'))
+        return;
+      if (!confirm('Точно удалить? Последнее предупреждение.')) return;
+      await api('/api/settings/account', { method: 'DELETE' });
+      location.hash = '#/';
+      location.reload();
+    });
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();

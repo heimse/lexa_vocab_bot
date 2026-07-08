@@ -320,7 +320,9 @@ export function createBot(): Bot {
           'set:notify',
         )
         .row()
-        .text('⏰ Время напоминания', 'set:hour'),
+        .text('⏰ Время напоминания', 'set:hour')
+        .row()
+        .text('🗑 Удалить мои данные', 'set:wipe'),
     };
   };
 
@@ -411,6 +413,34 @@ export function createBot(): Bot {
     });
     keyboard.row().text('← Назад', 'set:menu');
     await ctx.editMessageText('Во сколько присылать напоминание?', { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery('set:wipe', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await ctx.editMessageText(
+      '⚠️ Удалить ВСЕ ваши данные?\n\n' +
+        'Будут стёрты: наборы, все слова с карточками и вся история повторений. ' +
+        'Отменить это действие невозможно.',
+      {
+        reply_markup: new InlineKeyboard()
+          .text('❌ Да, удалить всё', 'wipe:confirm')
+          .row()
+          .text('← Нет, вернуться', 'set:menu'),
+      },
+    );
+  });
+
+  bot.callbackQuery('wipe:confirm', async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    await prisma.user.delete({ where: { id: user.id } });
+    reviewSessions.delete(user.id);
+    chatHistories.delete(user.id);
+    pendingAdds.delete(user.id);
+    awaitingWords.delete(user.id);
+    awaitingNotebookTitle.delete(user.id);
+    await ctx.editMessageText('Все данные удалены. Отправьте /start, чтобы начать заново.');
   });
 
   bot.callbackQuery(/^sethour:(\d{1,2})$/, async (ctx) => {

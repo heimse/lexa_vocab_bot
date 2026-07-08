@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db.js';
-import { requireAuth } from '../middleware/require-auth.js';
+import { AUTH_COOKIE, requireAuth } from '../middleware/require-auth.js';
 
 export const settingsRouter = Router();
 
@@ -67,4 +67,11 @@ settingsRouter.patch('/', async (req, res) => {
   }
   const user = await prisma.user.update({ where: { id: req.userId! }, data: parsed.data });
   res.json(toDto(user));
+});
+
+// Полное удаление аккаунта и всех данных (каскадом: наборы, слова, история)
+settingsRouter.delete('/account', async (req, res) => {
+  await prisma.user.delete({ where: { id: req.userId! } });
+  res.clearCookie(AUTH_COOKIE);
+  res.json({ ok: true });
 });

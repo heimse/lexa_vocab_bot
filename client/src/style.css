@@ -284,6 +284,12 @@ a:hover {
   font-size: 0.875rem;
 }
 
+.divider {
+  border: none;
+  border-top: 1px solid #1f2430;
+  margin: 2rem 0 1.5rem;
+}
+
 .checkbox-label {
   flex-direction: row !important;
   align-items: center;
