@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, type Context } from 'grammy';
+import { Bot, InlineKeyboard, Keyboard, type Context } from 'grammy';
 import { prisma } from '../db.js';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
@@ -12,6 +12,23 @@ const INBOX_TITLE = 'Telegram';
 const reviewSessions = new Map<string, { cards: ReviewCard[]; done: number }>();
 const chatHistories = new Map<string, ChatMessage[]>();
 const pendingAdds = new Map<string, string[]>();
+const awaitingWords = new Set<string>();
+
+const BUTTONS = {
+  review: '🔁 Повторение',
+  add: '➕ Добавить слова',
+  notebooks: '📚 Наборы',
+  settings: '⚙️ Настройки',
+} as const;
+
+const mainKeyboard = new Keyboard()
+  .text(BUTTONS.review)
+  .text(BUTTONS.add)
+  .row()
+  .text(BUTTONS.notebooks)
+  .text(BUTTONS.settings)
+  .resized()
+  .persistent();
 
 const BOT_LANGUAGE_NAMES: Record<string, string> = {
   ru: 'Русский',
@@ -108,7 +125,7 @@ export function createBot(): Bot {
       [
         'Привет! Я LEXA — личная память для иностранных слов. 🧠',
         '',
-        'Команды:',
+        'Управляйте кнопками внизу или командами:',
         '/add слово — добавить слово или список слов (каждое с новой строки)',
         '/review — повторить слова',
         '/notebooks — ваши наборы',
@@ -116,13 +133,11 @@ export function createBot(): Bot {
         '',
         'Любой другой текст — вопрос AI-тьютору, он знает ваш словарь.',
       ].join('\n'),
+      { reply_markup: mainKeyboard },
     );
   });
 
-  bot.command('add', async (ctx) => {
-    const user = await resolveUser(ctx);
-    if (!user) return;
-    const text = ctx.match;
+  const startAddFlow = async (ctx: Context, user: { id: string }, text: string) => {
     const entries = parseEntries(text);
     if (entries.length === 0) {
       await ctx.reply(
@@ -165,6 +180,12 @@ export function createBot(): Bot {
       `Куда добавить ${entries.length === 1 ? `«${entries[0]}»` : `слова (${entries.length})`}?`,
       { reply_markup: keyboard },
     );
+  };
+
+  bot.command('add', async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return;
+    await startAddFlow(ctx, user, ctx.match);
   });
 
   bot.callbackQuery('addcancel', async (ctx) => {
@@ -209,9 +230,7 @@ export function createBot(): Bot {
     );
   });
 
-  bot.command('notebooks', async (ctx) => {
-    const user = await resolveUser(ctx);
-    if (!user) return;
+  const showNotebooks = async (ctx: Context, user: { id: string }) => {
     const notebooks = await prisma.notebook.findMany({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
@@ -226,6 +245,12 @@ export function createBot(): Bot {
     await ctx.reply(
       notebooks.map((n) => `${n.emoji ?? '📖'} ${n.title} — ${n._count.items} слов`).join('\n'),
     );
+  };
+
+  bot.command('notebooks', async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return;
+    await showNotebooks(ctx, user);
   });
 
   const settingsOverview = async (userId: string) => {
@@ -249,11 +274,15 @@ export function createBot(): Bot {
     };
   };
 
+  const showSettings = async (ctx: Context, user: { id: string }) => {
+    const { text, keyboard } = await settingsOverview(user.id);
+    await ctx.reply(text, { reply_markup: keyboard });
+  };
+
   bot.command('settings', async (ctx) => {
     const user = await resolveUser(ctx);
     if (!user) return;
-    const { text, keyboard } = await settingsOverview(user.id);
-    await ctx.reply(text, { reply_markup: keyboard });
+    await showSettings(ctx, user);
   });
 
   bot.callbackQuery('set:menu', async (ctx) => {
@@ -323,9 +352,7 @@ export function createBot(): Bot {
     await ctx.editMessageText(text, { reply_markup: keyboard });
   });
 
-  bot.command('review', async (ctx) => {
-    const user = await resolveUser(ctx);
-    if (!user) return;
+  const startReview = async (ctx: Context, user: { id: string }) => {
     const queue = await getReviewQueue(user.id);
     if (queue.total === 0) {
       await ctx.reply('🎉 На сегодня всё! Нет слов для повторения.');
@@ -334,6 +361,12 @@ export function createBot(): Bot {
     reviewSessions.set(user.id, { cards: [...queue.due, ...queue.fresh], done: 0 });
     await ctx.reply(`Слов к повторению: ${queue.total}. Поехали!`);
     await sendNextCard(ctx, user.id);
+  };
+
+  bot.command('review', async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return;
+    await startReview(ctx, user);
   });
 
   bot.callbackQuery('reveal', async (ctx) => {
@@ -371,12 +404,37 @@ export function createBot(): Bot {
     await sendNextCard(ctx, user.id);
   });
 
-  // Свободный текст → AI-тьютор
+  // Кнопки основной клавиатуры и свободный текст
   bot.on('message:text', async (ctx) => {
     const user = await resolveUser(ctx);
     if (!user) return;
+    const text = ctx.message.text;
+
+    switch (text) {
+      case BUTTONS.review:
+        await startReview(ctx, user);
+        return;
+      case BUTTONS.notebooks:
+        await showNotebooks(ctx, user);
+        return;
+      case BUTTONS.settings:
+        await showSettings(ctx, user);
+        return;
+      case BUTTONS.add:
+        awaitingWords.add(user.id);
+        await ctx.reply('Отправьте слова или фразы — по одному на строку.');
+        return;
+    }
+
+    // Ждём список слов после нажатия «Добавить слова»
+    if (awaitingWords.delete(user.id)) {
+      await startAddFlow(ctx, user, text);
+      return;
+    }
+
+    // Иначе — вопрос AI-тьютору
     const history = chatHistories.get(user.id) ?? [];
-    history.push({ role: 'user', content: ctx.message.text.slice(0, 4000) });
+    history.push({ role: 'user', content: text.slice(0, 4000) });
 
     await ctx.replyWithChatAction('typing');
     let answer = '';
