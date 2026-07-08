@@ -7,6 +7,7 @@ import { notebooksRouter } from './notebooks/router.js';
 import { vocabularyRouter } from './vocabulary/router.js';
 import { reviewRouter } from './review/router.js';
 import { dashboardRouter } from './dashboard/router.js';
+import { aiRouter } from './ai/router.js';
 import { resumePendingCardGeneration } from './vocabulary/queue.js';
 
 const app = express();
@@ -20,6 +21,7 @@ app.use('/api/notebooks', notebooksRouter);
 app.use('/api/vocabulary', vocabularyRouter);
 app.use('/api/review', reviewRouter);
 app.use('/api/dashboard', dashboardRouter);
+app.use('/api/ai', aiRouter);
 
 app.get('/api/health', async (_req, res) => {
   try {

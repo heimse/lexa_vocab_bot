@@ -446,6 +446,73 @@ a.btn:hover {
   border-color: #2b5c7a;
 }
 
+/* --- Chat --- */
+
+.chat-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 110px);
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 0;
+}
+
+.chat-msg {
+  max-width: 85%;
+  padding: 0.6rem 0.9rem;
+  border-radius: 12px;
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.chat-user {
+  align-self: flex-end;
+  background: #3450a3;
+}
+
+.chat-assistant {
+  align-self: flex-start;
+  background: #151923;
+  border: 1px solid #1f2430;
+}
+
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: auto;
+}
+
+.chat-form {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.chat-form input {
+  font: inherit;
+  flex: 1;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid #2f3542;
+  border-radius: 8px;
+  background: #151923;
+  color: #e6e6e6;
+}
+
+.chat-form input:focus {
+  outline: none;
+  border-color: #3450a3;
+}
+
 /* --- Word table --- */
 
 .word-table {
