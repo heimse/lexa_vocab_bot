@@ -10,6 +10,7 @@ import { renderDashboard } from './views/dashboard.js';
 import { renderChat } from './views/chat.js';
 import { renderSettings } from './views/settings.js';
 import { renderSearch } from './views/search.js';
+import { renderExercises } from './views/exercises.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -21,6 +22,7 @@ function renderLayout(user: CurrentUser): HTMLElement {
         <a class="logo" href="#/">LEXA</a>
         <a href="#/notebooks">Наборы</a>
         <a href="#/review">Повторение</a>
+        <a href="#/exercises">Упражнения</a>
         <a href="#/chat">AI Chat</a>
         <a href="#/search">Поиск</a>
       </nav>
@@ -53,6 +55,7 @@ async function start(): Promise<void> {
       { pattern: /^#\/chat$/, render: renderChat },
       { pattern: /^#\/settings$/, render: renderSettings },
       { pattern: /^#\/search$/, render: renderSearch },
+      { pattern: /^#\/exercises$/, render: renderExercises },
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {

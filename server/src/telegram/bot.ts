@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, Keyboard, type Context } from 'grammy';
+import { Bot, InlineKeyboard, InputFile, Keyboard, type Context } from 'grammy';
 import { prisma } from '../db.js';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
@@ -12,6 +12,8 @@ import {
 } from '../review/service.js';
 import { chat } from '../ai/chat.js';
 import { appendChatMessages, getChatHistory } from '../ai/history.js';
+import { synthesizeSpeech } from '../ai/tts.js';
+import { createExercise, checkExercise, type Exercise } from '../ai/exercises.js';
 
 const INBOX_TITLE = 'Telegram';
 
@@ -24,6 +26,8 @@ const awaitingWords = new Map<string, { notebookId?: string; label?: string }>()
 const awaitingNotebookTitle = new Map<string, { entries?: string[] }>();
 // Ждём новое название существующего набора
 const awaitingRename = new Map<string, string>();
+// Активное упражнение — ждём ответ пользователя
+const activeExercises = new Map<string, Exercise>();
 
 function plural(n: number, one: string, few: string, many: string): string {
   const mod10 = n % 10;
@@ -38,6 +42,7 @@ const wordsCount = (n: number) => `${n} ${plural(n, 'слово', 'слова', 
 const BUTTONS = {
   review: '🔁 Повторение',
   add: '➕ Добавить слова',
+  exercise: '🎯 Упражнение',
   notebooks: '📚 Наборы',
   settings: '⚙️ Настройки',
 } as const;
@@ -46,6 +51,7 @@ const mainKeyboard = new Keyboard()
   .text(BUTTONS.review)
   .text(BUTTONS.add)
   .row()
+  .text(BUTTONS.exercise)
   .text(BUTTONS.notebooks)
   .text(BUTTONS.settings)
   .resized()
@@ -97,7 +103,12 @@ async function getInboxNotebook(userId: string): Promise<string> {
   return created.id;
 }
 
-function formatCardAnswer(card: ReviewCard): string {
+function formatCardAnswer(
+  card: Pick<
+    ReviewCard,
+    'text' | 'partOfSpeech' | 'translation' | 'explanation' | 'examples' | 'synonyms'
+  >,
+): string {
   const lines = [`<b>${card.text}</b>`];
   if (card.partOfSpeech) lines.push(`<i>${card.partOfSpeech}</i>`);
   lines.push('', `➡️ ${card.translation ?? ''}`);
@@ -107,12 +118,15 @@ function formatCardAnswer(card: ReviewCard): string {
   return lines.join('\n');
 }
 
-const ratingKeyboard = new InlineKeyboard()
-  .text('❌ Не помню', 'rate:AGAIN')
-  .text('😓 Трудно', 'rate:HARD')
-  .row()
-  .text('🙂 Хорошо', 'rate:GOOD')
-  .text('😎 Легко', 'rate:EASY');
+const ratingKeyboard = (cardId: string) =>
+  new InlineKeyboard()
+    .text('❌ Не помню', 'rate:AGAIN')
+    .text('😓 Трудно', 'rate:HARD')
+    .row()
+    .text('🙂 Хорошо', 'rate:GOOD')
+    .text('😎 Легко', 'rate:EASY')
+    .row()
+    .text('🔊 Озвучить', `tts:${cardId}`);
 
 async function sendNextCard(ctx: Context, userId: string): Promise<void> {
   const session = reviewSessions.get(userId);
@@ -136,6 +150,7 @@ export function createBot(): Bot {
   void bot.api.setMyCommands([
     { command: 'add', description: 'Добавить слово или список слов' },
     { command: 'review', description: 'Повторить слова' },
+    { command: 'exercise', description: 'Упражнение по словам' },
     { command: 'notebooks', description: 'Мои наборы' },
     { command: 'settings', description: 'Настройки' },
   ]);
@@ -607,6 +622,35 @@ export function createBot(): Bot {
     await startReview(ctx, user);
   });
 
+  const offerExercise = async (ctx: Context) => {
+    await ctx.reply('Какое упражнение?', {
+      reply_markup: new InlineKeyboard()
+        .text('✂️ Заполнить пропуск', 'ex:gap')
+        .row()
+        .text('✍️ Составить предложение', 'ex:sentence'),
+    });
+  };
+
+  bot.command('exercise', async (ctx) => {
+    const user = await resolveUser(ctx);
+    if (!user) return;
+    await offerExercise(ctx);
+  });
+
+  bot.callbackQuery(/^ex:(gap|sentence)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    await ctx.replyWithChatAction('typing');
+    const exercise = await createExercise(user.id, ctx.match[1] as 'gap' | 'sentence');
+    if (!exercise) {
+      await ctx.editMessageText('В словаре пока нет готовых слов — добавьте что-нибудь!');
+      return;
+    }
+    activeExercises.set(user.id, exercise);
+    await ctx.editMessageText(`🎯 ${exercise.prompt}\n\nНапишите ответ сообщением.`);
+  });
+
   bot.callbackQuery('reveal', async (ctx) => {
     const user = await resolveUser(ctx);
     const session = user && reviewSessions.get(user.id);
@@ -618,8 +662,22 @@ export function createBot(): Bot {
     }
     await ctx.editMessageText(formatCardAnswer(card), {
       parse_mode: 'HTML',
-      reply_markup: ratingKeyboard,
+      reply_markup: ratingKeyboard(card.id),
     });
+  });
+
+  bot.callbackQuery(/^tts:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const item = await prisma.vocabularyItem.findFirst({
+      where: { id: ctx.match[1], userId: user.id },
+      select: { id: true, text: true },
+    });
+    if (!item) return;
+    await ctx.replyWithChatAction('upload_voice');
+    const audio = await synthesizeSpeech(item.id, item.text);
+    await ctx.replyWithAudio(new InputFile(audio, `${item.text}.mp3`), { title: item.text });
   });
 
   bot.callbackQuery(/^rate:(AGAIN|HARD|GOOD|EASY)$/, async (ctx) => {
@@ -649,6 +707,9 @@ export function createBot(): Bot {
     const text = ctx.message.text;
 
     switch (text) {
+      case BUTTONS.exercise:
+        await offerExercise(ctx);
+        return;
       case BUTTONS.review:
         await startReview(ctx, user);
         return;
@@ -662,6 +723,20 @@ export function createBot(): Bot {
         awaitingWords.set(user.id, {});
         await ctx.reply('Отправьте слова или фразы — по одному на строку. Потом выберете набор.');
         return;
+    }
+
+    // Ответ на активное упражнение
+    const exercise = activeExercises.get(user.id);
+    if (exercise) {
+      activeExercises.delete(user.id);
+      await ctx.replyWithChatAction('typing');
+      const result = await checkExercise(exercise, text.slice(0, 1000));
+      await ctx.reply(`${result.correct ? '✅' : '❌'} ${result.feedback}`, {
+        reply_markup: new InlineKeyboard()
+          .text('🎯 Ещё упражнение', `ex:${exercise.type}`)
+          .text('🔊 Озвучить слово', `tts:${exercise.wordId}`),
+      });
+      return;
     }
 
     // Ждём новое название существующего набора
@@ -777,22 +852,49 @@ export function startDailyNotifications(bot: Bot): void {
       });
       for (const user of users) {
         if (notifiedOn.get(user.id) === today) continue;
-        const due = await countDue(user.id);
-        if (due === 0) continue;
-        const streak = await getStreak(user.id);
-        const streakLine =
-          streak > 0
-            ? `\n🔥 Ваш стрик: ${streak} ${plural(streak, 'день', 'дня', 'дней')} — не потеряйте!`
-            : '';
+        notifiedOn.set(user.id, today);
         try {
-          await bot.api.sendMessage(
-            Number(user.telegramId),
-            `📚 Пора повторить слова! Сегодня ждут: ${due}. Отправьте /review${streakLine}`,
-          );
+          const due = await countDue(user.id);
+          if (due > 0) {
+            const streak = await getStreak(user.id);
+            const streakLine =
+              streak > 0
+                ? `\n🔥 Ваш стрик: ${streak} ${plural(streak, 'день', 'дня', 'дней')} — не потеряйте!`
+                : '';
+            await bot.api.sendMessage(
+              Number(user.telegramId),
+              `📚 Пора повторить слова! Сегодня ждут: ${due}. Отправьте /review${streakLine}`,
+            );
+          }
+
+          // Слово дня: случайное из ещё не изучавшихся
+          const fresh = await prisma.vocabularyItem.findMany({
+            where: { userId: user.id, aiStatus: 'READY', state: 0 },
+            select: {
+              id: true,
+              text: true,
+              translation: true,
+              partOfSpeech: true,
+              explanation: true,
+              examples: true,
+              synonyms: true,
+              state: true,
+            },
+          });
+          const word = fresh[Math.floor(Math.random() * fresh.length)];
+          if (word) {
+            await bot.api.sendMessage(
+              Number(user.telegramId),
+              `🌅 Слово дня\n\n${formatCardAnswer(word)}`,
+              {
+                parse_mode: 'HTML',
+                reply_markup: new InlineKeyboard().text('🔊 Озвучить', `tts:${word.id}`),
+              },
+            );
+          }
         } catch {
           // пользователь не открывал бота — пропускаем
         }
-        notifiedOn.set(user.id, today);
       }
     },
     15 * 60 * 1000,

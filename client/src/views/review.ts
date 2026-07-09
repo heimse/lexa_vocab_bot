@@ -48,7 +48,9 @@ export async function renderReview(container: HTMLElement): Promise<void> {
           isNew ? ' · новое слово' : ''
         }</p>
         <div class="review-card">
-          <div class="review-word">${esc(card.text)}</div>
+          <div class="review-word">${esc(card.text)}
+            <button class="icon-btn" id="speak" title="Озвучить">🔊</button>
+          </div>
           <div id="answer" class="review-answer" hidden>
             <p class="review-translation">${esc(card.translation)}</p>
             ${card.explanation ? `<p class="muted">${esc(card.explanation)}</p>` : ''}
@@ -71,6 +73,10 @@ export async function renderReview(container: HTMLElement): Promise<void> {
         </div>
       </section>
     `;
+
+    container.querySelector<HTMLButtonElement>('#speak')!.addEventListener('click', () => {
+      void new Audio(`/api/vocabulary/${card.id}/audio`).play();
+    });
 
     const controls = container.querySelector<HTMLDivElement>('#controls')!;
     container.querySelector<HTMLButtonElement>('#show-answer')!.addEventListener('click', () => {

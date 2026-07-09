@@ -11,6 +11,7 @@ import { reviewRouter } from './review/router.js';
 import { dashboardRouter } from './dashboard/router.js';
 import { aiRouter } from './ai/router.js';
 import { settingsRouter } from './settings/router.js';
+import { webhookCallback, InputFile } from 'grammy';
 import { createBot, startDailyNotifications } from './telegram/bot.js';
 import { resumePendingCardGeneration } from './vocabulary/queue.js';
 
@@ -46,6 +47,17 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+// Telegram-бот: webhook в проде, long polling в dev
+const bot = createBot();
+if (config.telegramWebhookUrl) {
+  app.use(
+    '/api/telegram/webhook',
+    webhookCallback(bot, 'express', {
+      secretToken: config.telegramWebhookSecret ?? undefined,
+    }),
+  );
+}
+
 // Глобальный обработчик ошибок (Express 5 ловит и rejected promises)
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   logger.error({ err, method: req.method, url: req.url }, 'Unhandled request error');
@@ -58,10 +70,22 @@ app.listen(PORT, () => {
   logger.info(`LEXA API listening on http://localhost:${PORT}`);
   void resumePendingCardGeneration();
 
-  // Telegram-бот: long polling (webhook — на этапе деплоя)
-  const bot = createBot();
-  bot
-    .start({ onStart: (me) => logger.info(`Telegram bot @${me.username} started`) })
-    .catch((err) => logger.error({ err }, 'Telegram bot failed to start'));
+  if (config.telegramWebhookUrl) {
+    void bot.init().then(async () => {
+      await bot.api.setWebhook(config.telegramWebhookUrl!, {
+        secret_token: config.telegramWebhookSecret ?? undefined,
+        certificate: config.telegramWebhookCert
+          ? new InputFile(config.telegramWebhookCert)
+          : undefined,
+      });
+      logger.info(
+        `Telegram bot @${bot.botInfo.username} webhook set: ${config.telegramWebhookUrl}`,
+      );
+    });
+  } else {
+    bot
+      .start({ onStart: (me) => logger.info(`Telegram bot @${me.username} started (polling)`) })
+      .catch((err) => logger.error({ err }, 'Telegram bot failed to start'));
+  }
   startDailyNotifications(bot);
 });

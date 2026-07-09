@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware/require-auth.js';
 import { logger } from '../logger.js';
 import { chat } from './chat.js';
 import { appendChatMessages, clearChatHistory, getChatHistory } from './history.js';
+import { createExercise, checkExercise, type Exercise } from './exercises.js';
 
 export const aiRouter = Router();
 
@@ -16,6 +17,33 @@ aiRouter.get('/history', async (req, res) => {
 aiRouter.delete('/history', async (req, res) => {
   await clearChatHistory(req.userId!);
   res.json({ ok: true });
+});
+
+// Активные упражнения в памяти процесса: одно на пользователя
+const activeExercises = new Map<string, Exercise>();
+
+aiRouter.post('/exercise', async (req, res) => {
+  const type = (req.body as { type?: string })?.type === 'sentence' ? 'sentence' : 'gap';
+  const exercise = await createExercise(req.userId!, type);
+  if (!exercise) {
+    res.status(404).json({ error: 'В словаре пока нет готовых слов для упражнений' });
+    return;
+  }
+  activeExercises.set(req.userId!, exercise);
+  res.json({ type: exercise.type, prompt: exercise.prompt });
+});
+
+aiRouter.post('/exercise/answer', async (req, res) => {
+  const answer = String((req.body as { answer?: string })?.answer ?? '')
+    .trim()
+    .slice(0, 1000);
+  const exercise = activeExercises.get(req.userId!);
+  if (!exercise || !answer) {
+    res.status(400).json({ error: 'Нет активного упражнения' });
+    return;
+  }
+  activeExercises.delete(req.userId!);
+  res.json(await checkExercise(exercise, answer));
 });
 
 const chatSchema = z.object({

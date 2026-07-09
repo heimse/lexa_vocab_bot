@@ -12,4 +12,8 @@ export const config = {
   openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
   openaiChatModel: process.env.OPENAI_CHAT_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
   isDev: process.env.NODE_ENV !== 'production',
+  // Если задан URL — бот работает через webhook, иначе long polling
+  telegramWebhookUrl: process.env.TELEGRAM_WEBHOOK_URL || null,
+  telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || null,
+  telegramWebhookCert: process.env.TELEGRAM_WEBHOOK_CERT || null,
 };

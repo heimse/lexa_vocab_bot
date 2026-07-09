@@ -21,7 +21,7 @@ export async function renderWord(container: HTMLElement, params: string[]): Prom
     <section class="page">
       <p><a href="javascript:history.back()">← Назад</a></p>
       <div class="page-header">
-        <h2>${esc(word.text)}</h2>
+        <h2>${esc(word.text)} <button class="icon-btn" id="speak" title="Озвучить">🔊</button></h2>
         <span class="muted">${esc(word.language) || ''} ${esc(word.partOfSpeech) || ''}</span>
       </div>
       ${
@@ -68,6 +68,10 @@ export async function renderWord(container: HTMLElement, params: string[]): Prom
       <p class="muted">Повторений: ${word.reps} · Следующее: ${new Date(word.due).toLocaleDateString('ru')} · Добавлено: ${new Date(word.createdAt).toLocaleDateString('ru')}</p>
     </section>
   `;
+
+  container.querySelector<HTMLButtonElement>('#speak')!.addEventListener('click', () => {
+    void new Audio(`/api/vocabulary/${id}/audio`).play();
+  });
 
   const form = container.querySelector<HTMLFormElement>('#word-form')!;
   const status = container.querySelector<HTMLSpanElement>('#word-status')!;

@@ -4,6 +4,7 @@ import { prisma } from '../db.js';
 import { requireAuth } from '../middleware/require-auth.js';
 import { enqueueCardGeneration } from './queue.js';
 import { importEntries, parseEntries } from './service.js';
+import { synthesizeSpeech } from '../ai/tts.js';
 
 export const vocabularyRouter = Router();
 
@@ -112,6 +113,20 @@ vocabularyRouter.get('/search', async (req, res) => {
     },
   });
   res.json(items);
+});
+
+vocabularyRouter.get('/:id/audio', async (req, res) => {
+  const item = await prisma.vocabularyItem.findFirst({
+    where: { id: req.params.id, userId: req.userId! },
+    select: { id: true, text: true },
+  });
+  if (!item) {
+    res.status(404).json({ error: 'Word not found' });
+    return;
+  }
+  const audio = await synthesizeSpeech(item.id, item.text);
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  res.type('audio/mpeg').send(audio);
 });
 
 vocabularyRouter.get('/:id', async (req, res) => {

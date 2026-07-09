@@ -5,3 +5,4 @@ server/src/generated/
 .env.local
 *.log
 .DS_Store
+server/var/
