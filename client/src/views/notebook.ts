@@ -6,6 +6,7 @@ import {
   type NotebookWord,
 } from '../api.js';
 import { esc } from '../util.js';
+import { extractWordsFromFile } from '../import-file.js';
 
 const AI_STATUS_LABEL: Record<NotebookWord['aiStatus'], string> = {
   PENDING: '⏳ обработка',
@@ -54,10 +55,13 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
           placeholder="Вставьте слова или фразы — по одному на строку:&#10;&#10;destiny&#10;look forward to&#10;by the way"></textarea>
         <div class="import-actions">
           <button type="submit" class="btn btn-primary">Обработать</button>
+          <button type="button" class="btn" id="import-file-btn">📁 Из файла</button>
+          <input type="file" id="import-file" accept=".csv,.tsv,.txt" hidden />
           <span class="muted" id="import-status">${
             pendingCount > 0 ? `⏳ AI обрабатывает ${pendingCount} слов…` : ''
           }</span>
         </div>
+        <p class="muted">Файл: CSV, TSV или TXT (в т.ч. экспорт Anki) — берётся первая колонка.</p>
       </form>
       ${
         notebook.items.length === 0
@@ -119,6 +123,40 @@ export async function renderNotebook(container: HTMLElement, params: string[]): 
         status.textContent = err instanceof Error ? err.message : 'Ошибка импорта';
       }
     });
+
+  const fileButton = container.querySelector<HTMLButtonElement>('#import-file-btn')!;
+  const fileInput = container.querySelector<HTMLInputElement>('#import-file')!;
+  fileButton.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    const status = container.querySelector<HTMLSpanElement>('#import-status')!;
+    const words = extractWordsFromFile(await file.text());
+    if (words.length === 0) {
+      status.textContent = 'В файле не нашлось слов.';
+      return;
+    }
+    if (!confirm(`Найдено слов в файле: ${words.length}. Импортировать в этот набор?`)) return;
+
+    // Сервер принимает до 200 записей за раз — грузим порциями
+    let created = 0;
+    let linked = 0;
+    try {
+      for (let i = 0; i < words.length; i += 200) {
+        status.textContent = `Импорт… ${Math.min(i + 200, words.length)}/${words.length}`;
+        const result = await api<ImportResult>('/api/vocabulary/import', {
+          method: 'POST',
+          body: JSON.stringify({ notebookId: id, text: words.slice(i, i + 200).join('\n') }),
+        });
+        created += result.created;
+        linked += result.linked;
+      }
+      status.textContent = `Из файла добавлено: ${created}, уже были: ${linked}`;
+      await renderNotebook(container, params);
+    } catch (err) {
+      status.textContent = err instanceof Error ? err.message : 'Ошибка импорта файла';
+    }
+  });
 
   if (pendingCount > 0) {
     setTimeout(() => {
