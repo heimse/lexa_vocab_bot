@@ -14,6 +14,7 @@ import { chat } from '../ai/chat.js';
 import { appendChatMessages, getChatHistory } from '../ai/history.js';
 import { synthesizeSpeech } from '../ai/tts.js';
 import { createExercise, checkExercise, type Exercise } from '../ai/exercises.js';
+import { confirmLogin } from '../auth/bot-login.js';
 
 const INBOX_TITLE = 'Telegram';
 
@@ -156,7 +157,21 @@ export function createBot(): Bot {
   ]);
 
   bot.command('start', async (ctx) => {
-    await resolveUser(ctx);
+    const user = await resolveUser(ctx);
+
+    // Deep-link входа на сайт: /start auth_<nonce>
+    const payload = ctx.match.trim();
+    if (user && payload.startsWith('auth_')) {
+      const confirmed = confirmLogin(payload.slice(5), user.id);
+      await ctx.reply(
+        confirmed
+          ? '✅ Готово! Возвращайтесь на сайт — вы вошли.'
+          : 'Ссылка для входа устарела. Обновите страницу сайта и попробуйте ещё раз.',
+        { reply_markup: mainKeyboard },
+      );
+      return;
+    }
+
     await ctx.reply(
       [
         'Привет! Я LEXA — личная память для иностранных слов. 🧠',

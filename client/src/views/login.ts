@@ -37,6 +37,45 @@ export async function renderLogin(root: HTMLElement, onLogin: () => Promise<void
     actions.appendChild(script);
   }
 
+  // Вход через бота — работает и без привязанного домена (прод на голом IP)
+  if (config.botUsername) {
+    const botButton = document.createElement('button');
+    botButton.className = 'btn btn-primary';
+    botButton.textContent = '🤖 Войти через Telegram-бота';
+    const hint = document.createElement('p');
+    hint.className = 'muted';
+    botButton.addEventListener('click', async () => {
+      const { nonce, url } = await api<{ nonce: string; url: string }>(
+        '/api/auth/bot-login/start',
+        {
+          method: 'POST',
+        },
+      );
+      window.open(url, '_blank');
+      hint.textContent = 'Откройте бота и нажмите «Start» — вход подтвердится сам…';
+
+      const deadline = Date.now() + 5 * 60 * 1000;
+      const poll = async (): Promise<void> => {
+        if (Date.now() > deadline) {
+          hint.textContent = 'Время вышло — попробуйте ещё раз.';
+          return;
+        }
+        const result = await api<{ ok: boolean }>('/api/auth/bot-login/poll', {
+          method: 'POST',
+          body: JSON.stringify({ nonce }),
+        });
+        if (result.ok) {
+          await onLogin();
+        } else {
+          setTimeout(() => void poll(), 2000);
+        }
+      };
+      void poll();
+    });
+    actions.appendChild(botButton);
+    actions.appendChild(hint);
+  }
+
   if (config.devMode) {
     const devButton = document.createElement('button');
     devButton.className = 'btn';

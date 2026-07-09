@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { signToken } from './jwt.js';
 import { telegramAuthSchema, verifyTelegramAuth, type TelegramAuthData } from './telegram.js';
 import { AUTH_COOKIE, requireAuth } from '../middleware/require-auth.js';
+import { createLoginNonce, takeConfirmedLogin } from './bot-login.js';
 
 export const authRouter = Router();
 
@@ -88,6 +89,37 @@ authRouter.get('/config', async (_req, res) => {
     }
   }
   res.json({ botUsername: cachedBotUsername, devMode: config.isDev });
+});
+
+// Вход через бота: сайт получает nonce и deep-link, бот подтверждает
+authRouter.post('/bot-login/start', async (_req, res) => {
+  let username = cachedBotUsername;
+  if (!username) {
+    try {
+      const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/getMe`);
+      const body = (await response.json()) as { ok: boolean; result?: { username?: string } };
+      username = cachedBotUsername = body.ok ? (body.result?.username ?? null) : null;
+    } catch {
+      username = null;
+    }
+  }
+  if (!username) {
+    res.status(503).json({ error: 'Бот недоступен' });
+    return;
+  }
+  const nonce = createLoginNonce();
+  res.json({ nonce, url: `https://t.me/${username}?start=auth_${nonce}` });
+});
+
+authRouter.post('/bot-login/poll', (req, res) => {
+  const nonce = String((req.body as { nonce?: string })?.nonce ?? '');
+  const userId = nonce ? takeConfirmedLogin(nonce) : null;
+  if (!userId) {
+    res.json({ ok: false });
+    return;
+  }
+  setAuthCookie(res, userId);
+  res.json({ ok: true });
 });
 
 authRouter.get('/me', requireAuth, async (req, res) => {
