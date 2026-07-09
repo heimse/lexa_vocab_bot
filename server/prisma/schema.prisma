@@ -58,8 +58,22 @@ model User {
 
   notebooks       Notebook[]
   vocabularyItems VocabularyItem[]
+  chatMessages    ChatMessage[]
 
   @@map("users")
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  role      String // 'user' | 'assistant'
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("chat_messages")
 }
 
 model Notebook {

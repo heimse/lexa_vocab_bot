@@ -3,19 +3,27 @@ import { prisma } from '../db.js';
 import { logger } from '../logger.js';
 import { config } from '../config.js';
 import { parseEntries, importEntries } from '../vocabulary/service.js';
-import { getReviewQueue, submitReview, countDue, type ReviewCard } from '../review/service.js';
-import { chat, type ChatMessage } from '../ai/chat.js';
+import {
+  getReviewQueue,
+  submitReview,
+  countDue,
+  getStreak,
+  type ReviewCard,
+} from '../review/service.js';
+import { chat } from '../ai/chat.js';
+import { appendChatMessages, getChatHistory } from '../ai/history.js';
 
 const INBOX_TITLE = 'Telegram';
 
 // Состояние сессий в памяти процесса (MVP)
 const reviewSessions = new Map<string, { cards: ReviewCard[]; done: number }>();
-const chatHistories = new Map<string, ChatMessage[]>();
 const pendingAdds = new Map<string, string[]>();
 // Ждём список слов; если указан notebookId — кладём сразу в него, без выбора
 const awaitingWords = new Map<string, { notebookId?: string; label?: string }>();
 // Ждём название нового набора; entries — слова, которые надо в него положить
 const awaitingNotebookTitle = new Map<string, { entries?: string[] }>();
+// Ждём новое название существующего набора
+const awaitingRename = new Map<string, string>();
 
 function plural(n: number, one: string, few: string, many: string): string {
   const mod10 = n % 10;
@@ -277,18 +285,93 @@ export function createBot(): Bot {
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { items: true } } },
     });
-    const createKeyboard = new InlineKeyboard().text('➕ Создать набор', 'nb:new');
     if (notebooks.length === 0) {
-      await ctx.reply('Наборов пока нет.', { reply_markup: createKeyboard });
+      await ctx.reply('Наборов пока нет.', {
+        reply_markup: new InlineKeyboard().text('➕ Создать набор', 'nb:new'),
+      });
       return;
     }
-    await ctx.reply(
-      notebooks
-        .map((n) => `${n.emoji ?? '📖'} ${n.title} — ${wordsCount(n._count.items)}`)
-        .join('\n'),
-      { reply_markup: createKeyboard },
-    );
+    const keyboard = new InlineKeyboard();
+    for (const n of notebooks) {
+      keyboard.text(`${n.emoji ?? '📖'} ${n.title} (${n._count.items})`, `nbmenu:${n.id}`).row();
+    }
+    keyboard.text('➕ Создать набор', 'nb:new');
+    await ctx.reply('Ваши наборы — нажмите, чтобы управлять:', { reply_markup: keyboard });
   };
+
+  bot.callbackQuery(/^nbmenu:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const notebook = await prisma.notebook.findFirst({
+      where: { id: ctx.match[1], userId: user.id },
+      include: { _count: { select: { items: true } } },
+    });
+    if (!notebook) {
+      await ctx.editMessageText('Набор не найден.');
+      return;
+    }
+    await ctx.editMessageText(
+      `${notebook.emoji ?? '📖'} ${notebook.title} — ${wordsCount(notebook._count.items)}`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text('✏️ Переименовать', `nbren:${notebook.id}`)
+          .text('🗑 Удалить', `nbdel:${notebook.id}`)
+          .row()
+          .text('← К списку', 'nb:list'),
+      },
+    );
+  });
+
+  bot.callbackQuery('nb:list', async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    await ctx.deleteMessage().catch(() => {});
+    await showNotebooks(ctx, user);
+  });
+
+  bot.callbackQuery(/^nbren:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    awaitingRename.set(user.id, ctx.match[1]!);
+    await ctx.editMessageText('Напишите новое название набора (эмодзи в начале станет иконкой):');
+  });
+
+  bot.callbackQuery(/^nbdel:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const notebook = await prisma.notebook.findFirst({
+      where: { id: ctx.match[1], userId: user.id },
+    });
+    if (!notebook) {
+      await ctx.editMessageText('Набор не найден.');
+      return;
+    }
+    await ctx.editMessageText(
+      `Удалить набор «${notebook.emoji ?? '📖'} ${notebook.title}»?\n` +
+        'Слова останутся в словаре и продолжат повторяться.',
+      {
+        reply_markup: new InlineKeyboard()
+          .text('🗑 Да, удалить', `nbdelok:${notebook.id}`)
+          .text('← Отмена', `nbmenu:${notebook.id}`),
+      },
+    );
+  });
+
+  bot.callbackQuery(/^nbdelok:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const { count } = await prisma.notebook.deleteMany({
+      where: { id: ctx.match[1], userId: user.id },
+    });
+    await ctx.editMessageText(
+      count > 0 ? 'Набор удалён. Слова остались в словаре.' : 'Набор не найден.',
+    );
+  });
 
   bot.callbackQuery('nb:new', async (ctx) => {
     const user = await resolveUser(ctx);
@@ -455,7 +538,6 @@ export function createBot(): Bot {
     if (!user) return;
     await prisma.user.delete({ where: { id: user.id } });
     reviewSessions.delete(user.id);
-    chatHistories.delete(user.id);
     pendingAdds.delete(user.id);
     awaitingWords.delete(user.id);
     awaitingNotebookTitle.delete(user.id);
@@ -582,6 +664,28 @@ export function createBot(): Bot {
         return;
     }
 
+    // Ждём новое название существующего набора
+    const renameId = awaitingRename.get(user.id);
+    if (renameId) {
+      awaitingRename.delete(user.id);
+      const match = text.trim().match(/^(\p{Extended_Pictographic}(?:️)?)?\s*(.{1,100})$/su);
+      const title = match?.[2]?.trim();
+      if (!title) {
+        await ctx.reply('Название не подошло — попробуйте ещё раз (до 100 символов).');
+        return;
+      }
+      const { count } = await prisma.notebook.updateMany({
+        where: { id: renameId, userId: user.id },
+        data: { title, ...(match?.[1] ? { emoji: match[1] } : {}) },
+      });
+      await ctx.reply(
+        count > 0
+          ? `Переименовано: «${match?.[1] ? `${match[1]} ` : ''}${title}»`
+          : 'Набор не найден.',
+      );
+      return;
+    }
+
     // Ждём название нового набора
     const pendingNotebook = awaitingNotebookTitle.get(user.id);
     if (pendingNotebook) {
@@ -627,14 +731,13 @@ export function createBot(): Bot {
       return;
     }
 
-    // Иначе — вопрос AI-тьютору
-    const history = chatHistories.get(user.id) ?? [];
-    history.push({ role: 'user', content: text.slice(0, 4000) });
-
+    // Иначе — вопрос AI-тьютору (история общая с сайтом, хранится в БД)
+    const userMessage = text.slice(0, 4000);
     await ctx.replyWithChatAction('typing');
     let answer = '';
     try {
-      await chat(user.id, history.slice(-10), (delta) => {
+      const history = await getChatHistory(user.id, 10);
+      await chat(user.id, [...history, { role: 'user', content: userMessage }], (delta) => {
         answer += delta;
       });
     } catch (err) {
@@ -642,8 +745,10 @@ export function createBot(): Bot {
       await ctx.reply('Ошибка AI, попробуйте ещё раз.');
       return;
     }
-    history.push({ role: 'assistant', content: answer });
-    chatHistories.set(user.id, history.slice(-10));
+    await appendChatMessages(user.id, [
+      { role: 'user', content: userMessage },
+      { role: 'assistant', content: answer },
+    ]);
     await ctx.reply(answer || '…');
   });
 
@@ -674,10 +779,15 @@ export function startDailyNotifications(bot: Bot): void {
         if (notifiedOn.get(user.id) === today) continue;
         const due = await countDue(user.id);
         if (due === 0) continue;
+        const streak = await getStreak(user.id);
+        const streakLine =
+          streak > 0
+            ? `\n🔥 Ваш стрик: ${streak} ${plural(streak, 'день', 'дня', 'дней')} — не потеряйте!`
+            : '';
         try {
           await bot.api.sendMessage(
             Number(user.telegramId),
-            `📚 Пора повторить слова! Сегодня ждут: ${due}. Отправьте /review`,
+            `📚 Пора повторить слова! Сегодня ждут: ${due}. Отправьте /review${streakLine}`,
           );
         } catch {
           // пользователь не открывал бота — пропускаем

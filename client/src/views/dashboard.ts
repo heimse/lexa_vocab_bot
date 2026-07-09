@@ -5,8 +5,33 @@ interface DashboardData {
   totalWords: number;
   dueCount: number;
   newCount: number;
+  streak: number;
+  forecast: { date: string; count: number }[];
   statusCounts: Record<'NEW' | 'LEARNING' | 'REVIEW' | 'MASTERED', number>;
   recentNotebooks: { id: string; title: string; emoji: string | null; wordCount: number }[];
+}
+
+const DAY_NAMES = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб'];
+
+function renderForecast(forecast: DashboardData['forecast']): string {
+  const max = Math.max(...forecast.map((f) => f.count), 1);
+  return `
+    <div class="forecast">
+      ${forecast
+        .map((f, i) => {
+          const date = new Date(`${f.date}T00:00:00`);
+          const label = i === 0 ? 'сегодня' : DAY_NAMES[date.getDay()];
+          const height = f.count === 0 ? 2 : Math.max(6, Math.round((f.count / max) * 56));
+          return `
+          <div class="forecast-day" title="${f.date}: ${f.count}">
+            <span class="forecast-count">${f.count > 0 ? f.count : ''}</span>
+            <div class="forecast-bar${i === 0 ? ' forecast-today' : ''}" style="height:${height}px"></div>
+            <span class="forecast-label">${label}</span>
+          </div>`;
+        })
+        .join('')}
+    </div>
+  `;
 }
 
 const STATUS_LABELS: [keyof DashboardData['statusCounts'], string][] = [
@@ -39,6 +64,10 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
           <div class="stat-value">${data.newCount}</div>
           <div class="stat-label">новых слов</div>
         </div>
+        <div class="stat-tile">
+          <div class="stat-value">🔥 ${data.streak}</div>
+          <div class="stat-label">${data.streak === 1 ? 'день' : data.streak >= 2 && data.streak <= 4 ? 'дня' : 'дней'} подряд</div>
+        </div>
       </div>
 
       ${
@@ -46,6 +75,9 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
           ? `<p><a class="btn btn-primary" href="#/review">▶ Начать повторение</a></p>`
           : `<p class="muted">🎉 На сегодня всё повторено.</p>`
       }
+
+      <h3>Повторения на неделю</h3>
+      ${renderForecast(data.forecast)}
 
       <h3>Прогресс</h3>
       <div class="status-row">

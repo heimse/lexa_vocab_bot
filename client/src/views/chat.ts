@@ -1,12 +1,10 @@
+import { api } from '../api.js';
 import { esc } from '../util.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
 }
-
-// История живёт, пока открыта вкладка (персистентность чата — v2)
-const history: ChatMessage[] = [];
 
 const SUGGESTIONS = [
   'Что означает compelling?',
@@ -15,9 +13,15 @@ const SUGGESTIONS = [
   'Какие слова мне повторить сегодня?',
 ];
 
-export function renderChat(container: HTMLElement): void {
+export async function renderChat(container: HTMLElement): Promise<void> {
+  const history = await api<ChatMessage[]>('/api/ai/history');
+
   container.innerHTML = `
     <section class="page chat-page">
+      <div class="chat-header">
+        <span class="muted">История чата общая с Telegram-ботом</span>
+        <button class="btn btn-small" id="chat-clear" ${history.length === 0 ? 'hidden' : ''}>🗑 Очистить</button>
+      </div>
       <div class="chat-messages" id="chat-messages"></div>
       <form class="chat-form" id="chat-form">
         <input id="chat-input" type="text" placeholder="Спросите о слове, грамматике или своём словаре…"
@@ -31,6 +35,7 @@ export function renderChat(container: HTMLElement): void {
   const form = container.querySelector<HTMLFormElement>('#chat-form')!;
   const input = container.querySelector<HTMLInputElement>('#chat-input')!;
   const sendButton = container.querySelector<HTMLButtonElement>('#chat-send')!;
+  const clearButton = container.querySelector<HTMLButtonElement>('#chat-clear')!;
 
   const appendMessage = (role: ChatMessage['role'], content: string): HTMLDivElement => {
     const el = document.createElement('div');
@@ -41,21 +46,16 @@ export function renderChat(container: HTMLElement): void {
     return el;
   };
 
-  const renderHistory = (): void => {
-    messagesEl.innerHTML = '';
-    if (history.length === 0) {
-      messagesEl.innerHTML = `
-        <div class="chat-empty">
-          <p class="muted">AI-тьютор знает ваш словарь. Попробуйте:</p>
-          ${SUGGESTIONS.map((s) => `<button class="btn chat-suggestion">${esc(s)}</button>`).join('')}
-        </div>
-      `;
-      messagesEl
-        .querySelectorAll<HTMLButtonElement>('.chat-suggestion')
-        .forEach((b) => b.addEventListener('click', () => void send(b.textContent ?? '')));
-      return;
-    }
-    for (const message of history) appendMessage(message.role, message.content);
+  const renderEmpty = (): void => {
+    messagesEl.innerHTML = `
+      <div class="chat-empty">
+        <p class="muted">AI-тьютор знает ваш словарь. Попробуйте:</p>
+        ${SUGGESTIONS.map((s) => `<button class="btn chat-suggestion">${esc(s)}</button>`).join('')}
+      </div>
+    `;
+    messagesEl
+      .querySelectorAll<HTMLButtonElement>('.chat-suggestion')
+      .forEach((b) => b.addEventListener('click', () => void send(b.textContent ?? '')));
   };
 
   const send = async (text: string): Promise<void> => {
@@ -65,17 +65,17 @@ export function renderChat(container: HTMLElement): void {
     input.disabled = true;
     sendButton.disabled = true;
 
-    if (history.length === 0) messagesEl.innerHTML = '';
-    history.push({ role: 'user', content });
+    if (messagesEl.querySelector('.chat-empty')) messagesEl.innerHTML = '';
     appendMessage('user', content);
     const assistantEl = appendMessage('assistant', '…');
+    clearButton.hidden = false;
 
     let answer = '';
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history.slice(-20) }),
+        body: JSON.stringify({ message: content }),
       });
       if (!res.ok || !res.body) throw new Error('Сервер недоступен');
 
@@ -90,11 +90,7 @@ export function renderChat(container: HTMLElement): void {
         buffer = events.pop() ?? '';
         for (const event of events) {
           if (!event.startsWith('data: ')) continue;
-          const payload = JSON.parse(event.slice(6)) as {
-            delta?: string;
-            error?: string;
-            done?: boolean;
-          };
+          const payload = JSON.parse(event.slice(6)) as { delta?: string; error?: string };
           if (payload.delta) {
             answer += payload.delta;
             assistantEl.textContent = answer;
@@ -104,11 +100,9 @@ export function renderChat(container: HTMLElement): void {
         }
       }
       if (!answer) throw new Error('Пустой ответ');
-      history.push({ role: 'assistant', content: answer });
     } catch (err) {
       assistantEl.textContent = err instanceof Error ? err.message : 'Ошибка';
       assistantEl.classList.add('error');
-      if (answer) history.push({ role: 'assistant', content: answer });
     } finally {
       input.disabled = false;
       sendButton.disabled = false;
@@ -116,11 +110,22 @@ export function renderChat(container: HTMLElement): void {
     }
   };
 
+  clearButton.addEventListener('click', async () => {
+    if (!confirm('Очистить историю чата? Она удалится и на сайте, и в боте.')) return;
+    await api('/api/ai/history', { method: 'DELETE' });
+    clearButton.hidden = true;
+    renderEmpty();
+  });
+
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     void send(input.value);
   });
 
-  renderHistory();
+  if (history.length === 0) {
+    renderEmpty();
+  } else {
+    for (const message of history) appendMessage(message.role, message.content);
+  }
   input.focus();
 }

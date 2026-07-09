@@ -49,6 +49,60 @@ export async function countDue(userId: string): Promise<number> {
   });
 }
 
+/** Стрик: сколько дней подряд (включая сегодня или вчера) было хотя бы одно повторение. */
+export async function getStreak(userId: string): Promise<number> {
+  const rows = await prisma.$queryRaw<{ d: Date }[]>`
+    SELECT DISTINCT date(r.reviewed_at) AS d
+    FROM reviews r
+    JOIN vocabulary_items v ON v.id = r.vocabulary_item_id
+    WHERE v.user_id = ${userId}
+    ORDER BY d DESC
+    LIMIT 400
+  `;
+  const days = new Set(rows.map((r) => new Date(r.d).toDateString()));
+
+  const cursor = new Date();
+  // Сегодня ещё можно успеть — стрик не сгорает до конца дня
+  if (!days.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
+
+  let streak = 0;
+  while (days.has(cursor.toDateString())) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+
+/** Прогноз: сколько повторений подойдёт в каждый из ближайших days дней. */
+export async function getForecast(
+  userId: string,
+  days = 7,
+): Promise<{ date: string; count: number }[]> {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const result: { date: string; count: number }[] = [];
+
+  for (let i = 0; i < days; i++) {
+    const from = new Date(start);
+    from.setDate(from.getDate() + i);
+    const to = new Date(from);
+    to.setDate(to.getDate() + 1);
+    const count = await prisma.vocabularyItem.count({
+      where: {
+        userId,
+        aiStatus: 'READY',
+        state: { gt: 0 },
+        // Просроченные слова попадают в первый день
+        due: i === 0 ? { lt: to } : { gte: from, lt: to },
+      },
+    });
+    // Локальная дата, не UTC — иначе сдвиг на день в поясах восточнее Гринвича
+    const date = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-${String(from.getDate()).padStart(2, '0')}`;
+    result.push({ date, count });
+  }
+  return result;
+}
+
 /** Применяет оценку; возвращает null, если слово не принадлежит пользователю. */
 export async function submitReview(userId: string, itemId: string, rating: ReviewRating) {
   const item = await prisma.vocabularyItem.findFirst({ where: { id: itemId, userId } });
