@@ -83,8 +83,23 @@ app.listen(PORT, () => {
       );
     });
   } else {
-    bot
-      .start({ onStart: (me) => logger.info(`Telegram bot @${me.username} started (polling)`) })
+    // Long polling в grammY сначала удаляет webhook — не дадим локальному dev
+    // тем же токеном молча отцепить прод. Для локальной разработки с ботом
+    // заведите отдельного дев-бота и его токен в server/.env.
+    void bot.api
+      .getWebhookInfo()
+      .then((info) => {
+        if (info.url) {
+          logger.warn(
+            `Webhook уже установлен (${info.url}) — похоже, работает прод. ` +
+              'Локальный бот НЕ запущен. Используйте токен отдельного дев-бота.',
+          );
+          return;
+        }
+        return bot.start({
+          onStart: (me) => logger.info(`Telegram bot @${me.username} started (polling)`),
+        });
+      })
       .catch((err) => logger.error({ err }, 'Telegram bot failed to start'));
   }
   startDailyNotifications(bot);
