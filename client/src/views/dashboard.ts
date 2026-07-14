@@ -171,7 +171,7 @@ export async function renderDashboard(container: HTMLElement): Promise<void> {
 
       ${
         toReview > 0
-          ? `<p><a class="btn btn-primary" href="#/review">▶ Начать повторение</a></p>`
+          ? `<p><a class="btn btn-primary" href="#/practice">▶ Начать повторение</a></p>`
           : `<p class="muted">🎉 На сегодня всё повторено.</p>`
       }
 

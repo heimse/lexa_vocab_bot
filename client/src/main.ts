@@ -5,12 +5,11 @@ import { renderLogin } from './views/login.js';
 import { renderNotebooks } from './views/notebooks.js';
 import { renderNotebook } from './views/notebook.js';
 import { renderWord } from './views/word.js';
-import { renderReview } from './views/review.js';
 import { renderDashboard } from './views/dashboard.js';
 import { renderChat } from './views/chat.js';
 import { renderSettings } from './views/settings.js';
 import { renderSearch } from './views/search.js';
-import { renderExercises } from './views/exercises.js';
+import { renderPractice } from './views/practice.js';
 
 const root = document.querySelector<HTMLDivElement>('#app')!;
 
@@ -20,20 +19,36 @@ function renderLayout(user: CurrentUser): HTMLElement {
     <header class="topbar">
       <nav class="topbar-nav">
         <a class="logo" href="#/">LEXA</a>
+        <a href="#/search" class="icon-btn" title="Поиск">🔍</a>
         <a href="#/notebooks">Наборы</a>
-        <a href="#/review">Повторение</a>
-        <a href="#/exercises">Упражнения</a>
+        <a href="#/practice">Практика</a>
         <a href="#/chat">AI Chat</a>
-        <a href="#/search">Поиск</a>
       </nav>
       <div class="topbar-right">
-        <a href="#/settings" title="Настройки">⚙️</a>
-        <span class="muted">${esc(name)}</span>
-        <button class="btn btn-small" id="logout">Выйти</button>
+        <div class="user-menu" id="user-menu">
+          <button class="btn btn-small user-menu-toggle" id="user-menu-toggle">${esc(name)} ▾</button>
+          <div class="user-menu-dropdown" id="user-menu-dropdown" hidden>
+            <a href="#/settings">⚙️ Настройки</a>
+            <button id="logout">Выйти</button>
+          </div>
+        </div>
       </div>
     </header>
     <div id="view" class="view"></div>
   `;
+
+  const menu = root.querySelector<HTMLDivElement>('#user-menu')!;
+  const dropdown = root.querySelector<HTMLDivElement>('#user-menu-dropdown')!;
+  root.querySelector<HTMLButtonElement>('#user-menu-toggle')!.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdown.hidden = !dropdown.hidden;
+  });
+  document.addEventListener('click', (e) => {
+    if (!dropdown.hidden && !menu.contains(e.target as Node)) dropdown.hidden = true;
+  });
+  dropdown.querySelector('a')!.addEventListener('click', () => {
+    dropdown.hidden = true;
+  });
   root.querySelector<HTMLButtonElement>('#logout')!.addEventListener('click', async () => {
     await api('/api/auth/logout', { method: 'POST' });
     location.hash = '#/';
@@ -51,11 +66,10 @@ async function start(): Promise<void> {
       { pattern: /^#\/notebooks$/, render: renderNotebooks },
       { pattern: /^#\/notebooks\/([\w-]+)$/, render: renderNotebook },
       { pattern: /^#\/words\/([\w-]+)$/, render: renderWord },
-      { pattern: /^#\/review$/, render: renderReview },
+      { pattern: /^#\/practice(?:\/(review|exercises))?$/, render: renderPractice },
       { pattern: /^#\/chat$/, render: renderChat },
       { pattern: /^#\/settings$/, render: renderSettings },
       { pattern: /^#\/search$/, render: renderSearch },
-      { pattern: /^#\/exercises$/, render: renderExercises },
     ]);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {

@@ -13,8 +13,7 @@ interface ExerciseResult {
 
 export function renderExercises(container: HTMLElement): void {
   container.innerHTML = `
-    <section class="page exercises-page">
-      <div class="page-header"><h2>Упражнения</h2></div>
+    <div class="exercises-page">
       <div class="exercise-pick" id="pick">
         <button class="btn" data-type="gap">✂️ Заполнить пропуск</button>
         <button class="btn" data-type="sentence">✍️ Составить предложение</button>
@@ -27,7 +26,7 @@ export function renderExercises(container: HTMLElement): void {
         </form>
         <p id="exercise-feedback" class="exercise-feedback"></p>
       </div>
-    </section>
+    </div>
   `;
 
   const pick = container.querySelector<HTMLDivElement>('#pick')!;

@@ -16,11 +16,10 @@ export async function renderReview(container: HTMLElement): Promise<void> {
 
   if (cards.length === 0) {
     container.innerHTML = `
-      <section class="page review-page">
-        <h2>Повторение</h2>
+      <div class="review-page">
         <p>🎉 На сегодня всё! Нет слов для повторения.</p>
         <p><a href="#/">На главную</a></p>
-      </section>
+      </div>
     `;
     return;
   }
@@ -32,18 +31,18 @@ export async function renderReview(container: HTMLElement): Promise<void> {
     const card = cards.shift();
     if (!card) {
       container.innerHTML = `
-        <section class="page review-page">
-          <h2>Готово! 🎉</h2>
+        <div class="review-page">
+          <h3>Готово! 🎉</h3>
           <p>Повторено карточек: ${done}.</p>
           <p><a href="#/">На главную</a></p>
-        </section>
+        </div>
       `;
       return;
     }
 
     const isNew = card.state === 0;
     container.innerHTML = `
-      <section class="page review-page">
+      <div class="review-page">
         <p class="muted">Карточка ${Math.min(done + 1, plannedTotal)} из ${plannedTotal}${
           isNew ? ' · новое слово' : ''
         }</p>
@@ -71,7 +70,7 @@ export async function renderReview(container: HTMLElement): Promise<void> {
         <div class="review-controls" id="controls">
           <button class="btn btn-primary" id="show-answer">Показать ответ</button>
         </div>
-      </section>
+      </div>
     `;
 
     container.querySelector<HTMLButtonElement>('#speak')!.addEventListener('click', () => {
