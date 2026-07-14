@@ -309,56 +309,143 @@ export function createBot(): Bot {
     );
   });
 
-  const showNotebooks = async (ctx: Context, user: { id: string }) => {
+  // Список наборов и карточка набора живут в одном сообщении (навигация редактированием)
+  const notebooksListView = async (userId: string) => {
     const notebooks = await prisma.notebook.findMany({
-      where: { userId: user.id },
+      where: { userId },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { items: true } } },
     });
-    if (notebooks.length === 0) {
-      await ctx.reply('Наборов пока нет.', {
-        reply_markup: new InlineKeyboard().text('➕ Создать набор', 'nb:new'),
-      });
-      return;
-    }
     const keyboard = new InlineKeyboard();
     for (const n of notebooks) {
-      keyboard.text(`${n.emoji ?? '📖'} ${n.title} (${n._count.items})`, `nbmenu:${n.id}`).row();
+      keyboard
+        .text(`${n.emoji ?? '📖'} ${n.title} · ${wordsCount(n._count.items)}`, `nbmenu:${n.id}`)
+        .row();
     }
     keyboard.text('➕ Создать набор', 'nb:new');
-    await ctx.reply('Ваши наборы — нажмите, чтобы управлять:', { reply_markup: keyboard });
+    return {
+      text: notebooks.length === 0 ? 'Наборов пока нет.' : '📚 Ваши наборы:',
+      keyboard,
+    };
+  };
+
+  const notebookCardView = async (userId: string, notebookId: string) => {
+    const notebook = await prisma.notebook.findFirst({
+      where: { id: notebookId, userId },
+      include: {
+        _count: { select: { items: true } },
+        items: {
+          orderBy: { addedAt: 'desc' },
+          take: 5,
+          include: { vocabularyItem: { select: { text: true, translation: true } } },
+        },
+      },
+    });
+    if (!notebook) return null;
+
+    const lines = [
+      `<b>${notebook.emoji ?? '📖'} ${notebook.title}</b> — ${wordsCount(notebook._count.items)}`,
+    ];
+    if (notebook.description) lines.push(notebook.description);
+    if (notebook.items.length > 0) {
+      lines.push('', 'Последние слова:');
+      for (const { vocabularyItem: w } of notebook.items) {
+        lines.push(`• ${w.text}${w.translation ? ` — ${w.translation}` : ''}`);
+      }
+    }
+
+    const keyboard = new InlineKeyboard();
+    if (notebook._count.items > 0) {
+      keyboard
+        .text('📄 Все слова', `nbwords:${notebook.id}`)
+        .text('🔁 Повторить набор', `nbreview:${notebook.id}`)
+        .row();
+    }
+    keyboard
+      .text('➕ Добавить слова', `nbadd:${notebook.id}`)
+      .row()
+      .text('✏️ Переименовать', `nbren:${notebook.id}`)
+      .text('🗑 Удалить', `nbdel:${notebook.id}`)
+      .row()
+      .text('← Все наборы', 'nb:list');
+
+    return { notebook, text: lines.join('\n'), keyboard };
+  };
+
+  const showNotebooks = async (ctx: Context, user: { id: string }) => {
+    const { text, keyboard } = await notebooksListView(user.id);
+    await ctx.reply(text, { reply_markup: keyboard });
   };
 
   bot.callbackQuery(/^nbmenu:(.+)$/, async (ctx) => {
     const user = await resolveUser(ctx);
     await ctx.answerCallbackQuery();
     if (!user) return;
-    const notebook = await prisma.notebook.findFirst({
-      where: { id: ctx.match[1], userId: user.id },
-      include: { _count: { select: { items: true } } },
-    });
-    if (!notebook) {
+    const card = await notebookCardView(user.id, ctx.match[1]!);
+    if (!card) {
       await ctx.editMessageText('Набор не найден.');
       return;
     }
-    await ctx.editMessageText(
-      `${notebook.emoji ?? '📖'} ${notebook.title} — ${wordsCount(notebook._count.items)}`,
-      {
-        reply_markup: new InlineKeyboard()
-          .text('✏️ Переименовать', `nbren:${notebook.id}`)
-          .text('🗑 Удалить', `nbdel:${notebook.id}`)
-          .row()
-          .text('← К списку', 'nb:list'),
-      },
-    );
+    await ctx.editMessageText(card.text, { parse_mode: 'HTML', reply_markup: card.keyboard });
   });
 
   bot.callbackQuery('nb:list', async (ctx) => {
     const user = await resolveUser(ctx);
     await ctx.answerCallbackQuery();
     if (!user) return;
-    await ctx.deleteMessage().catch(() => {});
-    await showNotebooks(ctx, user);
+    const { text, keyboard } = await notebooksListView(user.id);
+    await ctx.editMessageText(text, { reply_markup: keyboard });
+  });
+
+  bot.callbackQuery(/^nbwords:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const notebook = await prisma.notebook.findFirst({
+      where: { id: ctx.match[1], userId: user.id },
+      include: {
+        items: {
+          orderBy: { addedAt: 'desc' },
+          take: 30,
+          include: { vocabularyItem: { select: { text: true, translation: true } } },
+        },
+        _count: { select: { items: true } },
+      },
+    });
+    if (!notebook) {
+      await ctx.editMessageText('Набор не найден.');
+      return;
+    }
+    const lines = notebook.items.map(
+      ({ vocabularyItem: w }) => `• ${w.text}${w.translation ? ` — ${w.translation}` : ''}`,
+    );
+    if (notebook._count.items > 30)
+      lines.push(`…и ещё ${notebook._count.items - 30} (полный список — на сайте)`);
+    await ctx.editMessageText(
+      `<b>${notebook.emoji ?? '📖'} ${notebook.title}</b>\n\n${lines.join('\n')}`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: new InlineKeyboard().text('← Назад', `nbmenu:${notebook.id}`),
+      },
+    );
+  });
+
+  bot.callbackQuery(/^nbadd:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    const notebook = await prisma.notebook.findFirst({
+      where: { id: ctx.match[1], userId: user.id },
+    });
+    if (!notebook) {
+      await ctx.editMessageText('Набор не найден.');
+      return;
+    }
+    const label = `${notebook.emoji ?? '📖'} ${notebook.title}`;
+    awaitingWords.set(user.id, { notebookId: notebook.id, label });
+    await ctx.editMessageText(
+      `Отправьте слова для «${label}» — по одному на строку. Они попадут сразу в этот набор.`,
+    );
   });
 
   bot.callbackQuery(/^nbren:(.+)$/, async (ctx) => {
@@ -400,6 +487,7 @@ export function createBot(): Bot {
     });
     await ctx.editMessageText(
       count > 0 ? 'Набор удалён. Слова остались в словаре.' : 'Набор не найден.',
+      { reply_markup: new InlineKeyboard().text('← Все наборы', 'nb:list') },
     );
   });
 
@@ -620,16 +708,27 @@ export function createBot(): Bot {
     await ctx.editMessageText(text, { reply_markup: keyboard });
   });
 
-  const startReview = async (ctx: Context, user: { id: string }) => {
-    const queue = await getReviewQueue(user.id);
+  const startReview = async (ctx: Context, user: { id: string }, notebookId?: string) => {
+    const queue = await getReviewQueue(user.id, notebookId);
     if (queue.total === 0) {
-      await ctx.reply('🎉 На сегодня всё! Нет слов для повторения.');
+      await ctx.reply(
+        notebookId
+          ? '🎉 В этом наборе сейчас нечего повторять.'
+          : '🎉 На сегодня всё! Нет слов для повторения.',
+      );
       return;
     }
     reviewSessions.set(user.id, { cards: [...queue.due, ...queue.fresh], done: 0 });
     await ctx.reply(`Слов к повторению: ${queue.total}. Поехали!`);
     await sendNextCard(ctx, user.id);
   };
+
+  bot.callbackQuery(/^nbreview:(.+)$/, async (ctx) => {
+    const user = await resolveUser(ctx);
+    await ctx.answerCallbackQuery();
+    if (!user) return;
+    await startReview(ctx, user, ctx.match[1]);
+  });
 
   bot.command('review', async (ctx) => {
     const user = await resolveUser(ctx);
@@ -772,6 +871,10 @@ export function createBot(): Bot {
         count > 0
           ? `Переименовано: «${match?.[1] ? `${match[1]} ` : ''}${title}»`
           : 'Набор не найден.',
+        {
+          reply_markup:
+            count > 0 ? new InlineKeyboard().text('← К набору', `nbmenu:${renameId}`) : undefined,
+        },
       );
       return;
     }

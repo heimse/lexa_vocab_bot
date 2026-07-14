@@ -18,7 +18,7 @@ const cardSelect = {
 
 export type ReviewCard = Awaited<ReturnType<typeof getReviewQueue>>['due'][number];
 
-export async function getReviewQueue(userId: string) {
+export async function getReviewQueue(userId: string, notebookId?: string) {
   const now = new Date();
 
   const user = await prisma.user.findUnique({
@@ -26,15 +26,17 @@ export async function getReviewQueue(userId: string) {
     select: { dailyDueLimit: true, dailyNewLimit: true },
   });
 
+  const notebookFilter = notebookId ? { notebooks: { some: { notebookId } } } : {};
+
   const due = await prisma.vocabularyItem.findMany({
-    where: { userId, aiStatus: 'READY', state: { gt: 0 }, due: { lte: now } },
+    where: { userId, aiStatus: 'READY', state: { gt: 0 }, due: { lte: now }, ...notebookFilter },
     orderBy: { due: 'asc' },
     take: user?.dailyDueLimit ?? 20,
     select: cardSelect,
   });
 
   const fresh = await prisma.vocabularyItem.findMany({
-    where: { userId, aiStatus: 'READY', state: 0 },
+    where: { userId, aiStatus: 'READY', state: 0, ...notebookFilter },
     orderBy: { createdAt: 'asc' },
     take: user?.dailyNewLimit ?? 10,
     select: cardSelect,
