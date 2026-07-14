@@ -12,6 +12,9 @@ export const config = {
   openaiModel: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
   openaiChatModel: process.env.OPENAI_CHAT_MODEL ?? process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
   isDev: process.env.NODE_ENV !== 'production',
+  // Secure-куки браузер принимает только по HTTPS. Прод пока на HTTP (голый IP),
+  // поэтому флаг управляется отдельно: COOKIE_SECURE=1 — включить.
+  cookieSecure: process.env.COOKIE_SECURE === '1',
   // Если задан URL — бот работает через webhook, иначе long polling
   telegramWebhookUrl: process.env.TELEGRAM_WEBHOOK_URL || null,
   telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || null,

@@ -14,7 +14,7 @@ function setAuthCookie(res: Response, userId: string): void {
   res.cookie(AUTH_COOKIE, signToken(userId), {
     httpOnly: true,
     sameSite: 'lax',
-    secure: !config.isDev,
+    secure: config.cookieSecure,
     maxAge: COOKIE_MAX_AGE,
   });
 }
