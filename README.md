@@ -1,38 +1,38 @@
 # LEXA — AI Vocabulary
 
-> Не просто словарь. Личная память для иностранных слов.
+> Not just a dictionary. A personal memory for foreign words.
 
-Спецификация — [SPEC.md](SPEC.md), план разработки — [PLAN.md](PLAN.md).
+Specification: [SPEC.md](SPEC.md). Development plan: [PLAN.md](PLAN.md).
 
-## Стек
+## Stack
 
 - **Backend:** TypeScript, Express, Prisma, PostgreSQL, grammY, OpenAI SDK
-- **Frontend:** Vite + vanilla TypeScript (без фреймворков)
+- **Frontend:** Vite + vanilla TypeScript (no frameworks)
 
-## Структура
+## Structure
 
 ```
-client/   — фронтенд (Vite)
-server/   — API, Telegram-бот, AI (Express)
+client/   — frontend (Vite)
+server/   — API, Telegram bot, AI (Express)
 ```
 
-## Запуск для разработки
+## Running locally
 
-Требования: Node 22 (закреплён через [Volta](https://volta.sh)), Docker.
+Requirements: Node 22 (pinned via [Volta](https://volta.sh)), Docker.
 
 ```bash
-# 1. Установить зависимости
+# 1. Install dependencies
 npm install
 
-# 2. Поднять PostgreSQL
+# 2. Start PostgreSQL
 docker compose up -d
 
-# 3. Настроить окружение
+# 3. Configure the environment
 cp server/.env.example server/.env
-# заполнить TELEGRAM_BOT_TOKEN и OPENAI_API_KEY
+# fill in TELEGRAM_BOT_TOKEN and OPENAI_API_KEY
 
-# 4. Запустить (API на :3000, фронт на :5173)
+# 4. Run (API on :3000, frontend on :5173)
 npm run dev
 ```
 
-Фронтенд проксирует `/api/*` на сервер (см. `client/vite.config.ts`).
+The frontend proxies `/api/*` to the server (see `client/vite.config.ts`).
